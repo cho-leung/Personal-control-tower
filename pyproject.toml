@@ -1,0 +1,9 @@
+[project]
+name = "personal-control-tower-bus"
+version = "0.1.0"
+description = "Local-first Personal Control Tower orchestration prototype"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6,<7"]
+
+[tool.setuptools.packages.find]
+include = ["control_tower*"]
