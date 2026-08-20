@@ -6,18 +6,23 @@ from .models import (
     Role,
     Lineage,
     State,
-    AuditVerdict
+    AuditVerdict,
 )
 
 from .guardrails import (
     assert_transition,
     assert_actor_owns_action,
     assert_auditable,
-    GovernanceError
+    GovernanceError,
 )
 
 from .agents import AgentRegistry
 
+from .events import (
+    Event,
+    EventResult,
+    EventLedger,
+)
 
 
 class ControlTowerBus:
@@ -33,7 +38,14 @@ class ControlTowerBus:
             vault.root
         )
 
+        self.event_ledger = EventLedger(
+            vault
+        )
 
+
+    # ----------------------------
+    # Agent Permission
+    # ----------------------------
 
     def check_agent(
         self,
@@ -46,7 +58,6 @@ class ControlTowerBus:
         )
 
         if not agent:
-
             raise GovernanceError(
                 f"Unknown agent: {agent_id}"
             )
@@ -70,6 +81,35 @@ class ControlTowerBus:
 
 
 
+    # ----------------------------
+    # Event Helper
+    # ----------------------------
+
+    def emit_event(
+        self,
+        event_id,
+        actor,
+        action,
+        target,
+        capability
+    ):
+
+        self.event_ledger.append(
+            Event(
+                event_id=event_id,
+                actor=actor,
+                action=action,
+                target=target,
+                result=EventResult.SUCCESS,
+                capability_checked=capability,
+            )
+        )
+
+
+
+    # ----------------------------
+    # Create Project
+    # ----------------------------
 
     def create_research_project(
         self,
@@ -79,14 +119,13 @@ class ControlTowerBus:
         phase
     ):
 
-
         self.check_agent(
             owner,
             "produce_artifact"
         )
 
 
-        d = (
+        project_dir = (
             self.vault.root
             /
             "01_RESEARCH"
@@ -95,70 +134,65 @@ class ControlTowerBus:
         )
 
 
-        for sub in [
+        for folder in [
             "handoffs",
             "claims",
             "audits",
             "artifacts",
-            "failed_routes"
+            "failed_routes",
         ]:
 
             (
-                d / sub
+                project_dir / folder
             ).mkdir(
                 parents=True,
                 exist_ok=True
             )
 
 
-        s = ProjectState(
-
+        state = ProjectState(
             project_id,
-
             title,
-
             Division.RESEARCH,
-
             phase,
-
             State.READY,
-
             owner,
-
             Role.PRODUCER,
-
             Lineage.CANONICAL,
-
             next_gate="ROOT_AUTHORIZATION",
-
             notes="READY only. No execution authorization."
-
         )
 
 
-        p = d / "STATE.md"
+        state_path = (
+            project_dir
+            /
+            "STATE.md"
+        )
 
 
         self.vault.write_state(
-            p,
-            s
+            state_path,
+            state
         )
 
 
-        self.vault.append_event(
-            {
-                "type":"PROJECT_CREATED",
-                "project_id":project_id,
-                "owner":owner
-            }
+        self.emit_event(
+            f"EVT-{project_id}-CREATE",
+            owner,
+            "CREATE_PROJECT",
+            project_id,
+            "produce_artifact"
         )
 
 
-        return s, p
+        return state, state_path
 
 
 
-
+    # ----------------------------
+    # Root Authorization
+    # ----------------------------
 
     def root_authorize(
         self,
@@ -174,20 +208,20 @@ class ControlTowerBus:
         )
 
 
-        s = self.vault.read_state(
+        state = self.vault.read_state(
             state_path
         )
 
 
         assert_transition(
-            s.state,
+            state.state,
             State.AUTHORIZED,
             Role.ROOT
         )
 
 
-        s = replace(
-            s,
+        state = replace(
+            state,
             state=State.AUTHORIZED,
             authorization_id=authorization_id,
             next_gate="PRODUCER_EXECUTION",
@@ -197,7 +231,16 @@ class ControlTowerBus:
 
         self.vault.write_state(
             state_path,
-            s
+            state
+        )
+
+
+        self.emit_event(
+            f"EVT-{state.project_id}-AUTHORIZE",
+            "personal_root",
+            "AUTHORIZE",
+            state.project_id,
+            "authorize"
         )
 
 
@@ -205,11 +248,9 @@ class ControlTowerBus:
             f"""
 ## {authorization_id}
 
-- Project: `{s.project_id}`
+- Project: `{state.project_id}`
 
-- Phase: `{s.phase}`
-
-- Decision: **AUTHORIZED**
+- Decision: AUTHORIZED
 
 - Scope: {scope}
 
@@ -217,11 +258,11 @@ class ControlTowerBus:
         )
 
 
-        return s
+        return state
 
-
-
-
+    # ----------------------------
+    # Start Execution
+    # ----------------------------
 
     def start_execution(
         self,
@@ -229,20 +270,19 @@ class ControlTowerBus:
         producer_name
     ):
 
-
         self.check_agent(
             producer_name,
             "produce_artifact"
         )
 
 
-        s = self.vault.read_state(
+        state = self.vault.read_state(
             state_path
         )
 
 
         assert_actor_owns_action(
-            s,
+            state,
             producer_name,
             Role.PRODUCER,
             "produce"
@@ -250,37 +290,49 @@ class ControlTowerBus:
 
 
         assert_transition(
-            s.state,
+            state.state,
             State.ACTIVE,
             Role.PRODUCER
         )
 
 
-        if not s.authorization_id:
+        if not state.authorization_id:
 
             raise GovernanceError(
                 "Missing Root authorization."
             )
 
 
-        s = replace(
-            s,
+        state = replace(
+            state,
             state=State.ACTIVE,
-            next_gate="PRODUCER_COMPLETE"
+            next_gate="PRODUCER_COMPLETE",
+            notes="Producer execution active."
         )
 
 
         self.vault.write_state(
             state_path,
-            s
+            state
         )
 
 
-        return s
+        self.emit_event(
+            f"EVT-{state.project_id}-EXECUTE",
+            producer_name,
+            "START_EXECUTION",
+            state.project_id,
+            "produce_artifact"
+        )
+
+
+        return state
 
 
 
-
+    # ----------------------------
+    # Producer Complete
+    # ----------------------------
 
     def producer_complete(
         self,
@@ -297,54 +349,51 @@ class ControlTowerBus:
         )
 
 
-        s = self.vault.read_state(
+        state = self.vault.read_state(
             state_path
         )
 
 
         assert_actor_owns_action(
-            s,
+            state,
             producer_name,
             Role.PRODUCER,
             "produce"
         )
 
 
-        if s.state != State.ACTIVE:
+        if state.state != State.ACTIVE:
 
             raise GovernanceError(
                 "Completion requires ACTIVE."
             )
 
 
-        d = state_path.parent
-
-
-        artifact = (
-            d
+        artifact_path = (
+            state_path.parent
             /
             "artifacts"
             /
-            f"{s.phase}_producer_artifact.txt"
+            f"{state.phase}_producer_artifact.txt"
         )
 
 
-        artifact.write_text(
+        artifact_path.write_text(
             artifact_text,
             encoding="utf-8"
         )
 
 
         sha = self.vault.freeze_artifact(
-            artifact
+            artifact_path
         )
 
 
-        s = replace(
-            s,
+        state = replace(
+            state,
             state=State.PRODUCER_COMPLETE,
             artifact_path=str(
-                artifact.relative_to(
+                artifact_path.relative_to(
                     self.vault.root
                 )
             ),
@@ -357,7 +406,16 @@ class ControlTowerBus:
 
         self.vault.write_state(
             state_path,
-            s
+            state
+        )
+
+
+        self.emit_event(
+            f"EVT-{state.project_id}-PRODUCE_COMPLETE",
+            producer_name,
+            "PRODUCE_ARTIFACT",
+            state.project_id,
+            "produce_artifact"
         )
 
 
@@ -368,19 +426,26 @@ class ControlTowerBus:
         )
 
 
-        s = replace(
-            s,
-            state=State.AUDIT_PENDING
+        state = replace(
+            state,
+            state=State.AUDIT_PENDING,
+            next_gate="INDEPENDENT_AUDIT"
         )
 
 
         self.vault.write_state(
             state_path,
-            s
+            state
         )
 
 
-        return s
+        return state
+
+
+
+    # ----------------------------
+    # Independent Audit
+    # ----------------------------
 
     def record_audit(
         self,
@@ -397,29 +462,26 @@ class ControlTowerBus:
         )
 
 
-        s = self.vault.read_state(
+        state = self.vault.read_state(
             state_path
         )
 
 
         assert_auditable(
-            s
+            state
         )
 
 
-        d = state_path.parent
-
-
-        audit_file = (
-            d
+        audit_path = (
+            state_path.parent
             /
             "audits"
             /
-            f"{s.phase}_audit.md"
+            f"{state.phase}_audit.md"
         )
 
 
-        audit_file.write_text(
+        audit_path.write_text(
 
             f"""
 # Independent Audit
@@ -428,7 +490,7 @@ class ControlTowerBus:
 - Auditor: `{auditor_name}`
 
 - Artifact SHA-256:
-`{s.artifact_sha256}`
+`{state.artifact_sha256}`
 
 - Verdict:
 **{verdict.value}**
@@ -458,18 +520,27 @@ class ControlTowerBus:
         )
 
 
-        s = replace(
-            s,
+        state = replace(
+            state,
             state=next_state,
             latest_audit_verdict=verdict.value,
             next_gate="ROOT_REVIEW",
-            notes=f"Audit returned {verdict.value}. Waiting for Root decision."
+            notes=f"Audit returned {verdict.value}."
         )
 
 
         self.vault.write_state(
             state_path,
-            s
+            state
+        )
+
+
+        self.emit_event(
+            f"EVT-{state.project_id}-AUDIT",
+            auditor_name,
+            "AUDIT",
+            state.project_id,
+            "audit"
         )
 
 
@@ -480,8 +551,8 @@ class ControlTowerBus:
         )
 
 
-        s = replace(
-            s,
+        state = replace(
+            state,
             state=State.WAITING_ROOT,
             next_gate="ROOT_DECISION"
         )
@@ -489,28 +560,27 @@ class ControlTowerBus:
 
         self.vault.write_state(
             state_path,
-            s
+            state
         )
 
 
         self.vault.write_root_inbox(
 
-            f"{s.project_id}_{s.phase}_GATE.md",
+            f"{state.project_id}_{state.phase}_GATE.md",
 
             f"""---
 
-project_id: {s.project_id}
+project_id: {state.project_id}
 
-phase: {s.phase}
+phase: {state.phase}
 
-state: {s.state.value}
+state: {state.state.value}
 
 audit_verdict: {verdict.value}
 
-artifact_sha256: {s.artifact_sha256}
+artifact_sha256: {state.artifact_sha256}
 
 ---
-
 
 # Root Gate Decision Required
 
@@ -520,11 +590,10 @@ Audit verdict:
 **{verdict.value}**
 
 
-No next phase has been authorized automatically.
+No next phase authorized automatically.
 
 
 ## Root Options
-
 
 - AUTHORIZE
 
@@ -541,21 +610,4 @@ No next phase has been authorized automatically.
         )
 
 
-        self.vault.append_event(
-
-            {
-
-                "type": "AUDIT_RECORDED",
-
-                "project_id": s.project_id,
-
-                "auditor": auditor_name,
-
-                "verdict": verdict.value
-
-            }
-
-        )
-
-
-        return s
+        return state

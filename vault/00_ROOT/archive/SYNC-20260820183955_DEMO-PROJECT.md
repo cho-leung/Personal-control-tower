@@ -1,5 +1,5 @@
 ---
-proposal_id: SYNC-20260820181744
+proposal_id: SYNC-20260820183955
 proposal_type: CREATE_RUNTIME
 target: DEMO-PROJECT
 reason: 'Registry entry exists but runtime missing: vault/01_RESEARCH/DEMO-PROJECT/STATE.md'

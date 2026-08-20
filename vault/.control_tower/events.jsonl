@@ -1,2 +1,5 @@
-{"type": "PROJECT_CREATED", "project_id": "TOY-THEOREM", "owner": "toy_producer", "timestamp_utc": "2026-08-20T18:17:44.020824+00:00"}
-{"type": "AUDIT_RECORDED", "project_id": "TOY-THEOREM", "auditor": "toy_auditor", "verdict": "PASS", "timestamp_utc": "2026-08-20T18:17:44.031205+00:00"}
+{"event_id": "EVT-TOY-THEOREM-CREATE", "actor": "toy_producer", "action": "CREATE_PROJECT", "target": "TOY-THEOREM", "result": "SUCCESS", "capability_checked": "produce_artifact", "note": "", "timestamp_utc": "2026-08-20T18:39:55.261971+00:00"}
+{"event_id": "EVT-TOY-THEOREM-AUTHORIZE", "actor": "personal_root", "action": "AUTHORIZE", "target": "TOY-THEOREM", "result": "SUCCESS", "capability_checked": "authorize", "note": "", "timestamp_utc": "2026-08-20T18:39:55.264475+00:00"}
+{"event_id": "EVT-TOY-THEOREM-EXECUTE", "actor": "toy_producer", "action": "START_EXECUTION", "target": "TOY-THEOREM", "result": "SUCCESS", "capability_checked": "produce_artifact", "note": "", "timestamp_utc": "2026-08-20T18:39:55.267062+00:00"}
+{"event_id": "EVT-TOY-THEOREM-PRODUCE_COMPLETE", "actor": "toy_producer", "action": "PRODUCE_ARTIFACT", "target": "TOY-THEOREM", "result": "SUCCESS", "capability_checked": "produce_artifact", "note": "", "timestamp_utc": "2026-08-20T18:39:55.269637+00:00"}
+{"event_id": "EVT-TOY-THEOREM-AUDIT", "actor": "toy_auditor", "action": "AUDIT", "target": "TOY-THEOREM", "result": "SUCCESS", "capability_checked": "audit", "note": "", "timestamp_utc": "2026-08-20T18:39:55.272573+00:00"}

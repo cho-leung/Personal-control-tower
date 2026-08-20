@@ -12,7 +12,6 @@ artifact_sha256: e2df6802c3d78b06fb56795cdd95bb514c60de56fdf90bf61343590b44b721a
 
 ---
 
-
 # Root Gate Decision Required
 
 
@@ -21,11 +20,10 @@ Audit verdict:
 **PASS**
 
 
-No next phase has been authorized automatically.
+No next phase authorized automatically.
 
 
 ## Root Options
-
 
 - AUTHORIZE
 

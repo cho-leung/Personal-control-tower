@@ -13,7 +13,7 @@ artifact_sha256: e2df6802c3d78b06fb56795cdd95bb514c60de56fdf90bf61343590b44b721a
 auditor: toy_auditor
 latest_audit_verdict: PASS
 next_gate: ROOT_DECISION
-notes: Audit returned PASS. Waiting for Root decision.
+notes: Audit returned PASS.
 ---
 
 # Synthetic Governance Test
@@ -46,5 +46,5 @@ notes: Audit returned PASS. Waiting for Root decision.
 ## Notes
 
 
-Audit returned PASS. Waiting for Root decision.
+Audit returned PASS.
 
