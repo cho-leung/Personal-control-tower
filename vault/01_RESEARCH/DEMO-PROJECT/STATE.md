@@ -21,6 +21,7 @@ notes: Runtime created by Root approval.
 
 ## Current State
 
+
 - **Project:** `DEMO-PROJECT`
 
 - **Phase:** `T0`
@@ -43,6 +44,7 @@ notes: Runtime created by Root approval.
 
 
 ## Notes
+
 
 Runtime created by Root approval.
 

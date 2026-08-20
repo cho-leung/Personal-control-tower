@@ -13,13 +13,14 @@ artifact_sha256: e2df6802c3d78b06fb56795cdd95bb514c60de56fdf90bf61343590b44b721a
 auditor: toy_auditor
 latest_audit_verdict: PASS
 next_gate: ROOT_DECISION
-notes: Audit returned PASS. No next phase auto-authorized.
+notes: Audit returned PASS. Waiting for Root decision.
 ---
 
 # Synthetic Governance Test
 
 
 ## Current State
+
 
 - **Project:** `TOY-THEOREM`
 
@@ -44,5 +45,6 @@ notes: Audit returned PASS. No next phase auto-authorized.
 
 ## Notes
 
-Audit returned PASS. No next phase auto-authorized.
+
+Audit returned PASS. Waiting for Root decision.
 

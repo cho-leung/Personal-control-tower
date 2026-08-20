@@ -9,10 +9,17 @@ import yaml
 from .models import ProjectState
 
 
+
 class Vault:
 
-    def __init__(self, root: Path):
+
+    def __init__(
+        self,
+        root: Path
+    ):
+
         self.root = root
+
 
 
     @property
@@ -24,14 +31,18 @@ class Vault:
 
     def ensure_structure(self):
 
+
         for d in [
 
-            self.root/"00_ROOT"/"inbox",
-            self.root/"00_ROOT"/"archive",
+            self.root / "00_ROOT" / "inbox",
 
-            self.root/"01_RESEARCH",
-            self.root/"02_BUSINESS",
-            self.root/"03_PERSONAL_GROWTH",
+            self.root / "00_ROOT" / "archive",
+
+            self.root / "01_RESEARCH",
+
+            self.root / "02_BUSINESS",
+
+            self.root / "03_PERSONAL_GROWTH",
 
             self.machine_dir
 
@@ -43,28 +54,123 @@ class Vault:
             )
 
 
+
         defaults = {
 
-            self.root/"00_ROOT"/"AGENT_REGISTRY.md":
+
+            self.root / "00_ROOT" / "AGENT_REGISTRY.md":
+
                 "# Agent Registry\n",
 
-            self.root/"00_ROOT"/"ACTIVE_BOARD.md":
+
+
+            self.root / "00_ROOT" / "ACTIVE_BOARD.md":
+
                 "# Active Board\n",
 
-            self.root/"00_ROOT"/"DECISION_LOG.md":
+
+
+            self.root / "00_ROOT" / "DECISION_LOG.md":
+
                 "# Decision Log\n",
+
+
+
+            self.root / "00_ROOT" / "agents.yaml":
+
+"""
+- agent_id: personal_root
+
+  division: ROOT
+
+  role: ROOT
+
+  status: ACTIVE
+
+  owns:
+    - ALL
+
+  capabilities:
+    - approve
+    - reject
+    - authorize
+
+  notes: Personal Control Tower Root
+
+
+
+- agent_id: research_controller
+
+  division: RESEARCH
+
+  role: CONTROLLER
+
+  status: ACTIVE
+
+  owns:
+    - RESEARCH
+
+  capabilities:
+    - create_project
+    - route_research
+
+  notes: Research governance controller
+
+
+
+- agent_id: toy_producer
+
+  division: RESEARCH
+
+  role: PRODUCER
+
+  status: ACTIVE
+
+  owns:
+    - TOY-THEOREM
+
+  capabilities:
+    - produce_artifact
+
+  notes: Synthetic demo producer
+
+
+
+- agent_id: toy_auditor
+
+  division: RESEARCH
+
+  role: AUDITOR
+
+  status: ACTIVE
+
+  owns:
+    - TOY-THEOREM
+
+  capabilities:
+    - audit
+
+  notes: Synthetic demo auditor
+"""
 
         }
 
 
-        for p,c in defaults.items():
 
-            if not p.exists():
+        for path, content in defaults.items():
 
-                p.write_text(
-                    c,
+
+            if not path.exists():
+
+                path.write_text(
+
+                    content,
+
                     encoding="utf-8"
+
                 )
+
+
 
 
 
@@ -74,16 +180,24 @@ class Vault:
         state: ProjectState
     ):
 
+
         path.parent.mkdir(
+
             parents=True,
+
             exist_ok=True
+
         )
 
 
         meta = yaml.safe_dump(
+
             state.to_dict(),
+
             sort_keys=False,
+
             allow_unicode=True
+
         )
 
 
@@ -92,6 +206,7 @@ class Vault:
 
 
 ## Current State
+
 
 - **Project:** `{state.project_id}`
 
@@ -116,43 +231,78 @@ class Vault:
 
 ## Notes
 
+
 {state.notes or 'None.'}
 
 """
 
 
         path.write_text(
+
             "---\n"
+
             + meta
+
             + "---\n"
+
             + body,
+
             encoding="utf-8"
+
         )
 
 
 
-    def read_state(self,path):
+
+
+    def read_state(
+        self,
+        path
+    ):
+
 
         text = path.read_text(
+
             encoding="utf-8"
+
         )
+
 
         parts = text.split(
+
             "---",
+
             2
+
         )
+
 
         return ProjectState.from_dict(
-            yaml.safe_load(parts[1])
+
+            yaml.safe_load(
+
+                parts[1]
+
+            )
+
         )
 
 
 
-    def append_event(self,event):
+
+
+    def append_event(
+        self,
+        event
+    ):
+
 
         self.machine_dir.mkdir(
+
             parents=True,
+
             exist_ok=True
+
         )
 
 
@@ -160,46 +310,81 @@ class Vault:
 
 
         event.setdefault(
+
             "timestamp_utc",
-            datetime.now(timezone.utc).isoformat()
+
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+
         )
 
 
         with (
-            self.machine_dir/"events.jsonl"
+
+            self.machine_dir / "events.jsonl"
+
         ).open(
+
             "a",
+
             encoding="utf-8"
+
         ) as f:
 
+
             f.write(
+
                 json.dumps(
+
                     event,
+
                     ensure_ascii=False
+
                 )
+
                 + "\n"
+
             )
 
 
 
-    def append_decision(self,text):
+
+
+    def append_decision(
+        self,
+        text
+    ):
+
 
         with (
+
             self.root
             /
             "00_ROOT"
             /
             "DECISION_LOG.md"
+
         ).open(
+
             "a",
+
             encoding="utf-8"
+
         ) as f:
 
+
             f.write(
+
                 "\n"
+
                 + text.rstrip()
+
                 + "\n"
+
             )
+
+
 
 
 
@@ -209,24 +394,38 @@ class Vault:
         content
     ):
 
+
         p = (
+
             self.root
+
             /
+
             "00_ROOT"
+
             /
+
             "inbox"
+
             /
+
             name
+
         )
 
 
         p.write_text(
+
             content,
+
             encoding="utf-8"
+
         )
 
 
         return p
+
+
 
 
 
@@ -235,26 +434,38 @@ class Vault:
         path: Path
     ):
 
+
         archive = (
+
             self.root
+
             /
+
             "00_ROOT"
+
             /
+
             "archive"
+
         )
 
 
         archive.mkdir(
+
             parents=True,
+
             exist_ok=True
+
         )
 
 
         target = archive / path.name
 
 
-        path.rename(
+        path.replace(
+
             target
+
         )
 
 
@@ -262,12 +473,21 @@ class Vault:
 
 
 
+
+
     @staticmethod
-    def freeze_artifact(path):
+    def freeze_artifact(
+        path
+    ):
+
 
         return hashlib.sha256(
+
             path.read_bytes()
+
         ).hexdigest()
+
+
 
 
 
@@ -278,24 +498,39 @@ class Vault:
         body
     ):
 
+
         path.parent.mkdir(
+
             parents=True,
+
             exist_ok=True
+
         )
 
 
         meta = yaml.safe_dump(
+
             metadata,
+
             sort_keys=False,
+
             allow_unicode=True
+
         )
 
 
         path.write_text(
+
             "---\n"
+
             + meta
+
             + "---\n"
+
             + body.strip()
+
             + "\n",
+
             encoding="utf-8"
+
         )

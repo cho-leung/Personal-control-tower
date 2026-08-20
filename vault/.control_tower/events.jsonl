@@ -1,1 +1,2 @@
-{"type": "PROJECT_CREATED", "project_id": "TOY-THEOREM", "timestamp_utc": "2026-08-20T17:59:48.338509+00:00"}
+{"type": "PROJECT_CREATED", "project_id": "TOY-THEOREM", "owner": "toy_producer", "timestamp_utc": "2026-08-20T18:17:44.020824+00:00"}
+{"type": "AUDIT_RECORDED", "project_id": "TOY-THEOREM", "auditor": "toy_auditor", "verdict": "PASS", "timestamp_utc": "2026-08-20T18:17:44.031205+00:00"}
