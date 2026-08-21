@@ -9,6 +9,8 @@ owner_role: PRODUCER
 agents:
   PRODUCER:
   - vision_researcher
+  AUDITOR:
+  - toy_auditor
 lineage: CANONICAL
 authorization_id: null
 artifact_path: null

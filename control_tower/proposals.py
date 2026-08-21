@@ -274,3 +274,37 @@ Possible decisions:
 
 
     return path
+
+def create_binding_proposal(
+    project_id: str,
+    agent_id: str,
+    role: str
+):
+    """
+    Create agent-project-role binding proposal.
+    """
+
+    return create_proposal(
+
+        proposal_type="CREATE_BINDING",
+
+        target=project_id,
+
+        reason=(
+            f"Bind agent '{agent_id}' "
+            f"to project '{project_id}' "
+            f"as role {role}."
+        ),
+
+        created_by="SYNC_CONTROLLER",
+
+        payload={
+
+            "project_id": project_id,
+
+            "agent_id": agent_id,
+
+            "role": role
+
+        }
+    )

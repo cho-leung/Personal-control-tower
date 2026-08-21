@@ -14,8 +14,10 @@ from .models import (
 from .vault import Vault
 
 from .proposal_router import ProposalRouter
+
 from .core.project_creation_engine import ProjectCreationEngine
 from .core.agent_creation_engine import AgentCreationEngine
+from .core.binding_engine import BindingEngine
 
 
 
@@ -55,7 +57,9 @@ def update_proposal_state(
 
 
     meta["state"] = state.value
+
     meta["decided_by"] = decided_by
+
     meta["decision_note"] = note
 
 
@@ -216,13 +220,6 @@ def execute_create_project(
     proposal: Proposal
 ):
 
-    """
-    Execute CREATE_PROJECT proposal.
-
-    Creates a new project runtime.
-    """
-
-
     vault = Vault(
         vault_path
     )
@@ -234,6 +231,52 @@ def execute_create_project(
 
 
     return engine.create_project(
+        proposal
+    )
+
+
+
+
+
+def execute_create_agent(
+    vault_path: Path,
+    proposal: Proposal
+):
+
+    vault = Vault(
+        vault_path
+    )
+
+
+    engine = AgentCreationEngine(
+        vault
+    )
+
+
+    return engine.create_agent(
+        proposal
+    )
+
+
+
+
+
+def execute_create_binding(
+    vault_path: Path,
+    proposal: Proposal
+):
+
+    vault = Vault(
+        vault_path
+    )
+
+
+    engine = BindingEngine(
+        vault
+    )
+
+
+    return engine.bind(
         proposal
     )
 
@@ -288,19 +331,20 @@ def execute_proposal(
 
     if proposal.proposal_type == "CREATE_AGENT":
 
-        vault = Vault(
-            vault_path
-        )
-
-        engine = AgentCreationEngine(
-            vault
-        )
-
-        result = engine.create_agent(
+        return execute_create_agent(
+            vault_path,
             proposal
         )
 
-        return result
+
+
+    if proposal.proposal_type == "CREATE_BINDING":
+
+        return execute_create_binding(
+            vault_path,
+            proposal
+        )
+
 
 
     raise ValueError(
