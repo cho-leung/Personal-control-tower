@@ -3,29 +3,80 @@
 
 ## ROOT-DEMO-001
 
-- Project: `TOY-THEOREM`
+- Project:
+`TOY-THEOREM`
 
-- Decision: AUTHORIZED
+- Decision:
+AUTHORIZED
 
-- Scope: Execute synthetic T0 only.
+- Scope:
+Execute synthetic T0 only.
 
 
 ## ROOT APPROVAL
 
-- Proposal:
-`SYNC-20260820183955_DEMO-PROJECT.md`
 
-- Action:
+- Proposal:
+
+`CREATE_RUNTIME-20260821072104_DEMO-PROJECT.md`
+
+
+- Type:
+
 CREATE_RUNTIME
 
-- Result:
-APPROVED
 
-- Proposal State:
+- Result:
+
 EXECUTED
 
-- Created Runtime:
-`vault/01_RESEARCH/DEMO-PROJECT/STATE.md`
 
-- Archived:
-`vault/00_ROOT/archive/SYNC-20260820183955_DEMO-PROJECT.md`
+- Runtime:
+
+vault/01_RESEARCH/DEMO-PROJECT/STATE.md
+
+
+## ROOT APPROVAL
+
+
+- Proposal:
+
+`CREATE_PROJECT-20260821072133_AI-TEST-PROJECT.md`
+
+
+- Type:
+
+CREATE_PROJECT
+
+
+- Result:
+
+EXECUTED
+
+
+- Runtime:
+
+vault/01_RESEARCH/AI-TEST-PROJECT/STATE.md
+
+
+## ROOT APPROVAL
+
+
+- Proposal:
+
+`CREATE_AGENT-20260821072532_vision_researcher.md`
+
+
+- Type:
+
+CREATE_AGENT
+
+
+- Result:
+
+EXECUTED
+
+
+- Runtime:
+
+vault/00_ROOT/agents.yaml

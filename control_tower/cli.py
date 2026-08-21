@@ -7,11 +7,14 @@ from .demo import run_demo
 from .status import render_status
 from .sync import sync_runtime
 from .decision import approve_proposal
+from .dashboard import render_dashboard
+
 
 
 def main():
 
     p = argparse.ArgumentParser()
+
 
     p.add_argument(
         "--vault",
@@ -19,26 +22,37 @@ def main():
         default=Path("vault")
     )
 
+
     sub = p.add_subparsers(
         dest="cmd",
         required=True
     )
 
 
-    # simple commands
+    # -------------------------
+    # basic commands
+    # -------------------------
+
     for x in [
         "init",
         "demo",
         "status",
-        "sync"
+        "sync",
+        "dashboard"
     ]:
+
         sub.add_parser(x)
 
 
+
+    # -------------------------
     # approve command
+    # -------------------------
+
     approve_parser = sub.add_parser(
         "approve"
     )
+
 
     approve_parser.add_argument(
         "proposal",
@@ -46,54 +60,100 @@ def main():
     )
 
 
-    a = p.parse_args()
+
+    args = p.parse_args()
 
 
-    if a.cmd == "init":
 
-        Vault(a.vault).ensure_structure()
+    # -------------------------
+    # INIT
+    # -------------------------
+
+    if args.cmd == "init":
+
+        Vault(
+            args.vault
+        ).ensure_structure()
+
 
         print(
-            f"Initialized: {a.vault.resolve()}"
+            f"Initialized: {args.vault.resolve()}"
         )
 
 
-    elif a.cmd == "demo":
 
-        run_demo(a.vault)
+    # -------------------------
+    # DEMO
+    # -------------------------
 
-        print(
-            render_status(a.vault)
+    elif args.cmd == "demo":
+
+        Vault(
+            args.vault
+        ).ensure_structure()
+
+
+        run_demo(
+            args.vault
         )
 
 
-    elif a.cmd == "status":
-
-        Vault(a.vault).ensure_structure()
-
         print(
-            render_status(a.vault)
+            render_status(
+                args.vault
+            )
         )
 
 
-    elif a.cmd == "sync":
 
-        Vault(a.vault).ensure_structure()
+    # -------------------------
+    # STATUS
+    # -------------------------
+
+    elif args.cmd == "status":
+
+        Vault(
+            args.vault
+        ).ensure_structure()
+
+
+        print(
+            render_status(
+                args.vault
+            )
+        )
+
+
+
+    # -------------------------
+    # SYNC
+    # -------------------------
+
+    elif args.cmd == "sync":
+
+        Vault(
+            args.vault
+        ).ensure_structure()
+
 
         proposals = sync_runtime(
-            a.vault
+            args.vault
         )
+
 
         print(
             "SYNC COMPLETE"
         )
 
+
         if proposals:
 
             for proposal in proposals:
+
                 print(
                     f"- Proposal created: {proposal}"
                 )
+
 
         else:
 
@@ -102,23 +162,55 @@ def main():
             )
 
 
-    elif a.cmd == "approve":
 
-        Vault(a.vault).ensure_structure()
+    # -------------------------
+    # APPROVE
+    # -------------------------
+
+    elif args.cmd == "approve":
+
+        Vault(
+            args.vault
+        ).ensure_structure()
+
 
         state_path = approve_proposal(
-            a.vault,
-            a.proposal
+            args.vault,
+            args.proposal
         )
+
 
         print(
             "Proposal approved."
         )
+
 
         print(
             f"Created runtime: {state_path}"
         )
 
 
+
+    # -------------------------
+    # DASHBOARD
+    # -------------------------
+
+    elif args.cmd == "dashboard":
+
+        Vault(
+            args.vault
+        ).ensure_structure()
+
+
+        print(
+            render_dashboard(
+                args.vault
+            )
+        )
+
+
+
+
 if __name__ == "__main__":
+
     main()
