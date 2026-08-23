@@ -25,6 +25,10 @@ from .events import (
     EventResult,
     EventLedger,
 )
+from .proposals import (
+    create_project_proposal,
+    write_proposal,
+)
 
 
 
@@ -51,7 +55,7 @@ class ControlTowerBus:
         )
 
 
-        # v0.6 architecture injection
+        # v1 engine injection
         self.project_engine = ProjectEngine(
             self.vault,
             self.agent_registry,
@@ -157,14 +161,46 @@ class ControlTowerBus:
         owner,
         phase
     ):
+        """Create a Root proposal; never create project state directly."""
 
-        return self.project_engine.create_research_project(
-            project_id,
-            title,
-            owner,
-            phase
+        proposal = create_project_proposal(
+            project_id=project_id,
+            title=title,
+            division="RESEARCH",
+            owner=owner,
+            phase=phase,
         )
 
+        path = write_proposal(
+            self.vault.root,
+            proposal,
+        )
+
+        return proposal, path
+
+
+
+    # ============================
+    # Root Gate Decision
+    # ============================
+
+    def root_decide(
+        self,
+        state_path,
+        decision_id,
+        decision,
+        note="",
+        next_phase=None,
+        scope=None,
+    ):
+        return self.decision_engine.root_decide(
+            state_path=state_path,
+            decision_id=decision_id,
+            decision=decision,
+            note=note,
+            next_phase=next_phase,
+            scope=scope,
+        )
 
 
     # ============================
@@ -175,12 +211,14 @@ class ControlTowerBus:
             self,
             state_path,
             authorization_id,
-            scope
+            scope,
+            next_phase=None,
     ):
         return self.decision_engine.authorize(
             state_path,
             authorization_id,
-            scope
+            scope,
+            next_phase,
         )
 
 
@@ -208,13 +246,17 @@ class ControlTowerBus:
             state_path,
             producer_name,
             artifact_text,
-            auditor_name
+            auditor_name,
+            task_id=None,
+            causation_event_id=None,
     ):
         return self.execution_engine.producer_complete(
             state_path,
             producer_name,
             artifact_text,
-            auditor_name
+            auditor_name,
+            task_id=task_id,
+            causation_event_id=causation_event_id,
         )
 
 

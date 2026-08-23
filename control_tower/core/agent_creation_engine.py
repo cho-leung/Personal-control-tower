@@ -1,121 +1,127 @@
 from pathlib import Path
-import yaml
+
+from ..agents import (
+    AgentRegistry,
+    AgentRole,
+    AgentState,
+    AgentStatus,
+)
+from ..guardrails import GovernanceError
+from ..models import Division
+
+
+ROLE_REQUIRED_CAPABILITIES = {
+    AgentRole.ROOT: {
+        "approve",
+        "reject",
+        "authorize",
+    },
+    AgentRole.PRODUCER: {
+        "produce_artifact",
+    },
+    AgentRole.AUDITOR: {
+        "audit",
+    },
+}
 
 
 class AgentCreationEngine:
-
-
-    def __init__(
-        self,
-        vault
-    ):
-
+    def __init__(self, vault):
         self.vault = vault
+        self.registry = AgentRegistry(vault.root)
 
-
-
-    def create_agent(
-        self,
-        proposal
-    ):
-
+    def create_agent(self, proposal):
         payload = proposal.payload
-
-
         agent_id = payload["agent_id"]
 
-        division = payload["division"]
-
-        role = payload["role"]
-
-        capabilities = payload.get(
-            "capabilities",
-            []
-        )
-
-        status = payload.get(
-            "status",
-            "ACTIVE"
-        )
-
-
-        agents_path = (
-
-            self.vault.root
-            /
-            "00_ROOT"
-            /
-            "agents.yaml"
-
-        )
-
-
-        if agents_path.exists():
-
-            data = yaml.safe_load(
-
-                agents_path.read_text(
-                    encoding="utf-8"
-                )
-
+        if proposal.target != agent_id:
+            raise GovernanceError(
+                "Agent proposal target does not match agent_id."
             )
 
-            if data is None:
-                data = []
+        if (
+            not agent_id
+            or Path(agent_id).name != agent_id
+        ):
+            raise GovernanceError(
+                f"Invalid agent id: {agent_id}"
+            )
 
-
-        else:
-
-            data = []
-
-
-
-        # 保持原 agents.yaml list 结构
-
-        for agent in data:
-
-            if agent.get("agent_id") == agent_id:
-
-                return agents_path
-
-
-
-        new_agent = {
-
-            "agent_id": agent_id,
-
-            "division": division,
-
-            "role": role,
-
-            "status": status,
-
-            "owns": [],
-
-            "capabilities": capabilities,
-
-            "notes": "Created by AgentCreationEngine."
-
-        }
-
-
-
-        data.append(
-            new_agent
+        division = Division(payload["division"])
+        role = AgentRole(payload["role"])
+        status = AgentStatus(
+            payload.get("status", "ACTIVE")
+        )
+        capabilities = sorted(
+            set(payload.get("capabilities", []))
         )
 
+        if (
+            role == AgentRole.ROOT
+            and agent_id != "personal_root"
+        ):
+            raise GovernanceError(
+                "Only personal_root may hold the ROOT role."
+            )
 
-        agents_path.write_text(
+        if not capabilities:
+            raise GovernanceError(
+                "Agent must have at least one capability."
+            )
 
-            yaml.safe_dump(
-                data,
-                sort_keys=False,
-                allow_unicode=True
+        missing_capabilities = (
+            ROLE_REQUIRED_CAPABILITIES.get(role, set())
+            - set(capabilities)
+        )
+
+        if missing_capabilities:
+            raise GovernanceError(
+                f"Role {role.value} requires capabilities: "
+                + ", ".join(sorted(missing_capabilities))
+            )
+
+        expected = AgentState(
+            agent_id=agent_id,
+            division=division.value,
+            role=role,
+            status=status,
+            owns=list(payload.get("owns", [])),
+            capabilities=capabilities,
+            notes=payload.get(
+                "notes",
+                "Created by Root-approved agent proposal.",
             ),
-
-            encoding="utf-8"
-
         )
+        existing = self.registry.get(agent_id)
 
+        if existing:
+            comparable_existing = {
+                "agent_id": existing.agent_id,
+                "division": existing.division,
+                "role": existing.role,
+                "status": existing.status,
+                "capabilities": sorted(
+                    existing.capabilities
+                ),
+            }
+            comparable_expected = {
+                "agent_id": expected.agent_id,
+                "division": expected.division,
+                "role": expected.role,
+                "status": expected.status,
+                "capabilities": sorted(
+                    expected.capabilities
+                ),
+            }
 
-        return agents_path
+            if comparable_existing != comparable_expected:
+                raise GovernanceError(
+                    f"Agent idempotency conflict: {agent_id}"
+                )
+
+            return self.registry.path
+
+        agents = self.registry.load()
+        agents.append(expected)
+        self.registry.save(agents)
+        return self.registry.path

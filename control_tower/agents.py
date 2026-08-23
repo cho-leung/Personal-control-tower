@@ -200,4 +200,9 @@ class AgentRegistry:
             return False
 
 
+        if agent.status != AgentStatus.ACTIVE:
+
+            return False
+
+
         return capability in agent.capabilities

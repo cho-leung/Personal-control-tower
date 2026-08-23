@@ -6,9 +6,7 @@ class RegistryLoader:
     """
     Load Personal Control Tower markdown registries.
 
-    v0:
-    Markdown is the source of truth.
-    No database yet.
+    Legacy Markdown registry compatibility for local reconciliation.
     """
 
     def __init__(self, vault_root: Path):

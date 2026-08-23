@@ -1,11 +1,23 @@
 from pathlib import Path
 import shutil
+import yaml
 
 from .vault import Vault
 from .bus import ControlTowerBus
-from .models import AuditVerdict
+from .agents import (
+    AgentRegistry,
+    AgentRole,
+    AgentState,
+    AgentStatus,
+)
+from .chief_of_staff import ChiefOfStaff
+from .runner import AutomatonRunner
 from .sync import sync_runtime
 from .decision import approve_proposal
+from .proposals import (
+    create_binding_proposal,
+    write_proposal,
+)
 from .status import render_status
 
 
@@ -17,9 +29,54 @@ def run_demo(
     if reset_demo and vault_path.exists():
         shutil.rmtree(vault_path)
 
+    if (
+        not reset_demo
+        and vault_path.exists()
+        and any(vault_path.glob("0[123]_*/*/STATE.md"))
+    ):
+        raise RuntimeError(
+            "Demo requires an empty vault or explicit --reset."
+        )
+
 
     vault = Vault(vault_path)
     vault.ensure_structure()
+
+
+    registry = AgentRegistry(vault.root)
+    agents = registry.load()
+    known = {agent.agent_id for agent in agents}
+
+
+    if "toy_producer" not in known:
+        agents.append(
+            AgentState(
+                agent_id="toy_producer",
+                division="RESEARCH",
+                role=AgentRole.PRODUCER,
+                status=AgentStatus.ACTIVE,
+                owns=["TOY-THEOREM"],
+                capabilities=["produce_artifact"],
+                notes="Deterministic demo producer.",
+            )
+        )
+
+
+    if "toy_auditor" not in known:
+        agents.append(
+            AgentState(
+                agent_id="toy_auditor",
+                division="RESEARCH",
+                role=AgentRole.AUDITOR,
+                status=AgentStatus.ACTIVE,
+                owns=["TOY-THEOREM"],
+                capabilities=["audit"],
+                notes="Deterministic demo auditor.",
+            )
+        )
+
+
+    registry.save(agents)
 
 
     print("\n==============================")
@@ -38,11 +95,41 @@ def run_demo(
     bus = ControlTowerBus(vault)
 
 
-    _, state_path = bus.create_research_project(
+    project_proposal, _ = bus.create_research_project(
         "TOY-THEOREM",
         "Synthetic Governance Test",
         "toy_producer",
         "T0"
+    )
+
+
+    approve_proposal(
+        vault_path,
+        project_proposal.proposal_id,
+    )
+
+
+    state_path = vault.find_state_path(
+        "TOY-THEOREM"
+    )
+
+
+    binding_proposal = create_binding_proposal(
+        "TOY-THEOREM",
+        "toy_auditor",
+        "AUDITOR",
+    )
+
+
+    write_proposal(
+        vault_path,
+        binding_proposal,
+    )
+
+
+    approve_proposal(
+        vault_path,
+        binding_proposal.proposal_id,
     )
 
 
@@ -67,12 +154,16 @@ def run_demo(
     )
 
 
-    bus.record_audit(
-        state_path,
-        "toy_auditor",
-        AuditVerdict.PASS,
-        "Synthetic audit passed."
+    AutomatonRunner(vault).run_pending()
+
+
+    approve_proposal(
+        vault_path,
+        "CREATE_AUDIT_REQUEST"
     )
+
+
+    ChiefOfStaff(vault).tick()
 
 
     print("    project lifecycle OK\n")
@@ -99,7 +190,7 @@ def run_demo(
         encoding="utf-8"
     ) as f:
         f.write(
-            "\n| DEMO-PROJECT | RESEARCH | demo_owner | ACTIVE | demo |\n"
+            "\n| DEMO-PROJECT | RESEARCH | toy_producer | ACTIVE | demo |\n"
         )
 
 
@@ -115,9 +206,16 @@ def run_demo(
 
         proposal = proposals[0]
 
+        metadata = yaml.safe_load(
+            proposal.read_text(
+                encoding="utf-8"
+            ).split("---", 2)[1]
+        )
+
+
         approve_proposal(
             vault_path,
-            proposal.stem.split("_")[0]
+            metadata["proposal_id"]
         )
 
 

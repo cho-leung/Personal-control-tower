@@ -1,2 +1,3 @@
-"""Personal Control Tower Bus V0."""
-__version__ = "0.1.0"
+"""Personal Control Tower: a local-first, Root-governed CLI control plane."""
+
+__version__ = "1.0.0"

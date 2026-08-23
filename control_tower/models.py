@@ -157,6 +157,15 @@ class ProjectState:
     notes: str = ""
 
 
+    last_decision_id: Optional[str] = None
+
+    last_decision_action: Optional[str] = None
+
+    last_decision_evidence: Dict[str, Any] = field(
+        default_factory=dict
+    )
+
+
 
     def to_dict(self):
 
@@ -251,6 +260,22 @@ class ProjectState:
             notes=d.get(
                 "notes",
                 ""
+            ),
+
+
+            last_decision_id=d.get(
+                "last_decision_id"
+            ),
+
+
+            last_decision_action=d.get(
+                "last_decision_action"
+            ),
+
+
+            last_decision_evidence=d.get(
+                "last_decision_evidence",
+                {}
             )
         )
 

@@ -1,6 +1,18 @@
 .venv/
+
 __pycache__/
 *.pyc
+
+*.egg-info/
+build/
+
 .env
 .DS_Store
-vault/.control_tower/runtime.lock
+
+# Runtime data
+vault/
+control-tower-vault/
+
+# Backup
+*.bak
+*.bak*

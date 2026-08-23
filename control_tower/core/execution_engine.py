@@ -6,7 +6,9 @@ from ..models import (
 )
 
 from ..guardrails import (
+    assert_transition,
     assert_actor_owns_action,
+    assert_valid_auditor,
     GovernanceError,
 )
 
@@ -36,7 +38,8 @@ class ExecutionEngine:
     def check_agent(
         self,
         agent_id,
-        capability
+        capability,
+        required_role=None,
     ):
 
         agent = self.agent_registry.get(
@@ -50,10 +53,28 @@ class ExecutionEngine:
             )
 
 
+        if agent.status.value != "ACTIVE":
+
+            raise GovernanceError(
+                f"Inactive agent: {agent_id}"
+            )
+
+
         if capability not in agent.capabilities:
 
             raise GovernanceError(
                 f"Missing capability: {capability}"
+            )
+
+
+        if (
+            required_role is not None
+            and agent.role.value != required_role.value
+        ):
+
+            raise GovernanceError(
+                f"Role mismatch: {agent.role.value} "
+                f"!= {required_role.value}"
             )
 
 
@@ -67,9 +88,10 @@ class ExecutionEngine:
         producer_name
     ):
 
-        self.check_agent(
+        agent = self.check_agent(
             producer_name,
-            "produce_artifact"
+            "produce_artifact",
+            Role.PRODUCER,
         )
 
 
@@ -81,7 +103,7 @@ class ExecutionEngine:
         assert_actor_owns_action(
             state,
             producer_name,
-            Role.PRODUCER,
+            Role(agent.role.value),
             "produce"
         )
 
@@ -91,6 +113,12 @@ class ExecutionEngine:
             raise GovernanceError(
                 "Missing Root authorization."
             )
+
+        assert_transition(
+            state.state,
+            State.ACTIVE,
+            Role(agent.role.value),
+        )
 
 
         state = replace(
@@ -107,12 +135,13 @@ class ExecutionEngine:
         )
 
 
-        self.event_ledger.append(
+        self.event_ledger.append_once(
 
             Event(
 
                 event_id=
-                f"EVT-{state.project_id}-EXECUTE",
+                f"EVT-{state.project_id}-EXECUTE-"
+                f"{state.phase}-{state.authorization_id}",
 
                 actor=producer_name,
 
@@ -138,13 +167,16 @@ class ExecutionEngine:
         state_path,
         producer_name,
         artifact_text,
-        auditor_name
+        auditor_name,
+        task_id=None,
+        causation_event_id=None,
     ):
 
 
-        self.check_agent(
+        agent = self.check_agent(
             producer_name,
-            "produce_artifact"
+            "produce_artifact",
+            Role.PRODUCER,
         )
 
 
@@ -153,10 +185,21 @@ class ExecutionEngine:
         )
 
 
+        auditor = self.agent_registry.get(
+            auditor_name
+        )
+
+
+        assert_valid_auditor(
+            replace(state, auditor=auditor_name),
+            auditor,
+        )
+
+
         assert_actor_owns_action(
             state,
             producer_name,
-            Role.PRODUCER,
+            Role(agent.role.value),
             "produce"
         )
 
@@ -166,6 +209,13 @@ class ExecutionEngine:
             raise GovernanceError(
                 "Completion requires ACTIVE."
             )
+
+
+        assert_transition(
+            state.state,
+            State.PRODUCER_COMPLETE,
+            Role(agent.role.value),
+        )
 
 
         artifact_path = (
@@ -205,7 +255,7 @@ class ExecutionEngine:
 
             auditor=auditor_name,
 
-            next_gate="INDEPENDENT_AUDIT",
+            next_gate="ROOT_AUDIT_APPROVAL",
 
             notes="Producer complete. Artifact frozen."
 
@@ -218,24 +268,13 @@ class ExecutionEngine:
         )
 
 
-        state = replace(
-            state,
-            state=State.AUDIT_PENDING
-        )
-
-
-        self.vault.write_state(
-            state_path,
-            state
-        )
-
-
-        self.event_ledger.append(
+        self.event_ledger.append_once(
 
             Event(
 
                 event_id=
-                f"EVT-{state.project_id}-PRODUCE_COMPLETE",
+                f"EVT-{state.project_id}-PRODUCE_COMPLETE-"
+                f"{state.phase}-{sha[:12]}",
 
                 actor=producer_name,
 
@@ -245,7 +284,17 @@ class ExecutionEngine:
 
                 result=EventResult.SUCCESS,
 
-                capability_checked="produce_artifact"
+                capability_checked="produce_artifact",
+
+                correlation_id=task_id,
+
+                causation_id=causation_event_id,
+
+                metadata=(
+                    {"task_id": task_id}
+                    if task_id
+                    else {}
+                )
 
             )
 

@@ -37,6 +37,8 @@ class Vault:
 
             self.root / "00_ROOT" / "archive",
 
+            self.root / "00_ROOT" / "agent_specs",
+
             self.root / "01_RESEARCH",
 
             self.root / "02_BUSINESS",
@@ -61,6 +63,10 @@ class Vault:
 
             self.root / "00_ROOT" / "ACTIVE_BOARD.md":
                 "# Active Board\n",
+
+
+            self.root / "00_ROOT" / "PROJECT_REGISTRY.md":
+                "# Project Registry\n",
 
 
             self.root / "00_ROOT" / "DECISION_LOG.md":
@@ -222,6 +228,50 @@ class Vault:
 
 
 
+    def find_state_path(
+        self,
+        project_id: str
+    ):
+
+        if (
+            not project_id
+            or Path(project_id).name != project_id
+        ):
+            raise ValueError(
+                f"Invalid project id: {project_id}"
+            )
+
+        matches = []
+
+        for division_dir in [
+            "01_RESEARCH",
+            "02_BUSINESS",
+            "03_PERSONAL_GROWTH",
+        ]:
+            candidate = (
+                self.root
+                / division_dir
+                / project_id
+                / "STATE.md"
+            )
+
+            if candidate.exists():
+                matches.append(candidate)
+
+        if not matches:
+            raise FileNotFoundError(
+                f"Project state not found: {project_id}"
+            )
+
+        if len(matches) > 1:
+            raise RuntimeError(
+                f"Ambiguous project state: {project_id}"
+            )
+
+        return matches[0]
+
+
+
 
 
     def append_event(
@@ -344,8 +394,18 @@ class Vault:
             exist_ok=True
         )
 
+        timestamp = datetime.now(
+            timezone.utc
+        ).strftime(
+            "%Y%m%dT%H%M%S%fZ"
+        )
 
-        target = archive / path.name
+
+        target = (
+            archive
+            /
+            f"{timestamp}_{path.name}"
+        )
 
 
         path.replace(

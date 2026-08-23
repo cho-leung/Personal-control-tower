@@ -59,6 +59,42 @@ class ProposalRouter:
 
             },
 
+
+            "CREATE_AUDIT_REQUEST": {
+
+                "handler": "AuditRequestEngine",
+
+                "action": "CREATE_AUDIT_REQUEST"
+
+            },
+
+
+            "ARCHIVE_AGENT": {
+
+                "handler": "AgentLifecycleEngine",
+
+                "action": "ARCHIVE_AGENT"
+
+            },
+
+
+            "UPDATE_AGENT_ROLE": {
+
+                "handler": "AgentLifecycleEngine",
+
+                "action": "UPDATE_AGENT_ROLE"
+
+            },
+
+
+            "UPDATE_AGENT_CAPABILITY": {
+
+                "handler": "AgentLifecycleEngine",
+
+                "action": "UPDATE_AGENT_CAPABILITY"
+
+            },
+
         }
 
 

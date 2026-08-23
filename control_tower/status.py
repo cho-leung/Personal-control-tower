@@ -10,7 +10,7 @@ def render_status(vault_path: Path):
 
     lines = []
 
-    lines.append("PERSONAL CONTROL TOWER — V0.2 STATUS")
+    lines.append("PERSONAL CONTROL TOWER v1 STATUS")
     lines.append("=" * 72)
 
     # ==========================
@@ -62,9 +62,20 @@ def render_status(vault_path: Path):
 
     rows = []
 
-    for p in sorted(
-        vault_path.glob("01_RESEARCH/*/STATE.md")
+    state_paths = []
+
+    for division in (
+        "01_RESEARCH",
+        "02_BUSINESS",
+        "03_PERSONAL_GROWTH",
     ):
+        state_paths.extend(
+            vault_path.glob(
+                f"{division}/*/STATE.md"
+            )
+        )
+
+    for p in sorted(state_paths):
 
         s = vault.read_state(p)
 

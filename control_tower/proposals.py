@@ -31,7 +31,7 @@ def create_proposal(
         "-"
         +
         datetime.now(timezone.utc)
-        .strftime("%Y%m%d%H%M%S")
+        .strftime("%Y%m%d%H%M%S%f")
 
     )
 
@@ -203,6 +203,69 @@ def write_proposal(
         f"{proposal.target}.md"
     )
 
+
+    if path.exists():
+
+        text = path.read_text(
+            encoding="utf-8"
+        )
+
+        parts = text.split(
+            "---",
+            2
+        )
+
+        existing = (
+            yaml.safe_load(parts[1])
+            if len(parts) >= 3
+            else None
+        )
+
+        if not isinstance(existing, dict):
+            raise ValueError(
+                f"Invalid existing proposal: {path}"
+            )
+
+        for key, expected in {
+            "proposal_id": proposal.proposal_id,
+            "proposal_type": proposal.proposal_type,
+            "target": proposal.target,
+            "payload": proposal.payload,
+        }.items():
+
+            if existing.get(key) != expected:
+                raise ValueError(
+                    "Proposal idempotency conflict: "
+                    f"{key}"
+                )
+
+        return path
+
+
+    archive = (
+        vault_path
+        / "00_ROOT"
+        / "archive"
+    )
+
+    if archive.exists():
+
+        archived = []
+
+        direct = archive / path.name
+
+        if direct.exists():
+            archived.append(direct)
+
+        archived.extend(
+            archive.glob(
+                f"*_{path.name}"
+            )
+        )
+
+        if archived:
+            return sorted(archived)[-1]
+
     metadata = yaml.safe_dump(
         proposal.to_dict(),
         sort_keys=False,
@@ -307,4 +370,62 @@ def create_binding_proposal(
             "role": role
 
         }
+    )
+
+
+def create_archive_agent_proposal(
+    agent_id: str,
+    reason: str = "Agent is no longer active in the organization.",
+):
+    return create_proposal(
+        proposal_type="ARCHIVE_AGENT",
+        target=agent_id,
+        reason=reason,
+        created_by="personal_root",
+        payload={
+            "agent_id": agent_id,
+        },
+    )
+
+
+def create_update_agent_role_proposal(
+    agent_id: str,
+    role: str,
+    reason: str = "Root-directed organization role change.",
+):
+    return create_proposal(
+        proposal_type="UPDATE_AGENT_ROLE",
+        target=agent_id,
+        reason=reason,
+        created_by="personal_root",
+        payload={
+            "agent_id": agent_id,
+            "role": role,
+        },
+    )
+
+
+def create_update_agent_capability_proposal(
+    agent_id: str,
+    capability: str,
+    operation: str = "ADD",
+    reason: str = "Root-directed capability update.",
+):
+    operation = operation.upper()
+
+    if operation not in {"ADD", "REMOVE"}:
+        raise ValueError(
+            f"Unknown capability operation: {operation}"
+        )
+
+    return create_proposal(
+        proposal_type="UPDATE_AGENT_CAPABILITY",
+        target=agent_id,
+        reason=reason,
+        created_by="personal_root",
+        payload={
+            "agent_id": agent_id,
+            "capability": capability,
+            "operation": operation,
+        },
     )

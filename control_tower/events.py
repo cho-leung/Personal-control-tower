@@ -1,7 +1,7 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Any, Dict, Optional
 import json
 
 
@@ -10,6 +10,10 @@ class EventResult(str, Enum):
 
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
+
+
+class EventConflictError(RuntimeError):
+    pass
 
 
 
@@ -29,6 +33,14 @@ class Event:
     capability_checked: Optional[str] = None
 
     note: str = ""
+
+    correlation_id: Optional[str] = None
+
+    causation_id: Optional[str] = None
+
+    metadata: Dict[str, Any] = field(
+        default_factory=dict
+    )
 
     timestamp_utc: str = ""
 
@@ -102,6 +114,64 @@ class EventLedger:
                 +
                 "\n"
             )
+
+
+
+    def contains(
+        self,
+        event_id: str
+    ):
+
+        return any(
+            event.get("event_id") == event_id
+            for event in self.read_all()
+        )
+
+
+
+    def append_once(
+        self,
+        event: Event
+    ):
+        expected = event.to_dict()
+        expected.pop("timestamp_utc", None)
+
+        defaults = {
+            "capability_checked": None,
+            "note": "",
+            "correlation_id": None,
+            "causation_id": None,
+            "metadata": {},
+        }
+
+        for existing in self.read_all():
+            if existing.get("event_id") != event.event_id:
+                continue
+
+            actual = {
+                key: existing.get(
+                    key,
+                    defaults.get(key),
+                )
+                for key in expected
+            }
+
+            if actual != expected:
+                differing = sorted(
+                    key
+                    for key in expected
+                    if actual.get(key) != expected.get(key)
+                )
+                raise EventConflictError(
+                    "Event id already exists with conflicting evidence: "
+                    f"{event.event_id} ({', '.join(differing)})"
+                )
+
+            return False
+
+        self.append(event)
+
+        return True
 
 
 

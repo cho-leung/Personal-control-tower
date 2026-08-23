@@ -48,6 +48,20 @@ class ProjectEngine:
             )
 
 
+        if agent.status.value != "ACTIVE":
+
+            raise GovernanceError(
+                f"Inactive agent: {owner}"
+            )
+
+
+        if agent.role.value != Role.PRODUCER.value:
+
+            raise GovernanceError(
+                f"Project owner is not a PRODUCER: {owner}"
+            )
+
+
         if "produce_artifact" not in agent.capabilities:
 
             raise GovernanceError(
@@ -69,6 +83,7 @@ class ProjectEngine:
             "handoffs",
             "claims",
             "audits",
+            "tasks",
             "artifacts",
             "failed_routes"
         ]:
@@ -84,21 +99,25 @@ class ProjectEngine:
 
         state = ProjectState(
 
-            project_id,
+            project_id=project_id,
 
-            title,
+            title=title,
 
-            Division.RESEARCH,
+            division=Division.RESEARCH,
 
-            phase,
+            phase=phase,
 
-            State.READY,
+            state=State.READY,
 
-            owner,
+            owner=owner,
 
-            Role.PRODUCER,
+            owner_role=Role.PRODUCER,
 
-            Lineage.CANONICAL,
+            agents={
+                Role.PRODUCER.value: [owner]
+            },
+
+            lineage=Lineage.CANONICAL,
 
             next_gate="ROOT_AUTHORIZATION",
 
