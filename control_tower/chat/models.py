@@ -1,9 +1,10 @@
-"""Typed contracts shared by chat adapters and the read-only presenter."""
+"""Typed contracts for governed chat queries and Proposal drafting."""
 
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Tuple
+import re
+from typing import Optional, Tuple, Union
 
 
 class IntentValidationError(ValueError):
@@ -20,6 +21,13 @@ class IntentKind(str, Enum):
     ATTENTION_ITEMS = "ATTENTION_ITEMS"
     RECENT_EVENTS = "RECENT_EVENTS"
     HELP = "HELP"
+    DRAFT_CREATE_TASK = "DRAFT_CREATE_TASK"
+    DRAFT_CREATE_PROJECT_REQUEST = (
+        "DRAFT_CREATE_PROJECT_REQUEST"
+    )
+    DRAFT_CREATE_AGENT_REQUEST = (
+        "DRAFT_CREATE_AGENT_REQUEST"
+    )
     UNSUPPORTED_ACTION = "UNSUPPORTED_ACTION"
     UNKNOWN = "UNKNOWN"
 
@@ -38,12 +46,152 @@ READ_ONLY_INTENTS = frozenset(
     }
 )
 
+DRAFT_INTENTS = frozenset(
+    {
+        IntentKind.DRAFT_CREATE_TASK,
+        IntentKind.DRAFT_CREATE_PROJECT_REQUEST,
+        IntentKind.DRAFT_CREATE_AGENT_REQUEST,
+    }
+)
+
+
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _required_text(value, label, limit=2000):
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or value != value.strip()
+        or len(value) > limit
+        or _CONTROL_RE.search(value)
+    ):
+        raise IntentValidationError(f"Invalid {label}.")
+
+    return value
+
+
+def _identifier(value, label):
+    _required_text(value, label, limit=160)
+
+    if Path(value).name != value or value in {".", ".."}:
+        raise IntentValidationError(f"Invalid {label}.")
+
+    return value
+
+
+@dataclass(frozen=True)
+class TaskProposalRequest:
+    objective: str
+    project_hint: Optional[str] = None
+
+    def __post_init__(self):
+        _required_text(self.objective, "task objective")
+
+        if self.project_hint is not None:
+            _identifier(self.project_hint, "project hint")
+
+
+@dataclass(frozen=True)
+class ProjectProposalRequest:
+    project_id: str
+    title: str
+    division: str
+    owner: str
+    phase: str = "T0"
+    lineage: str = "CANONICAL"
+
+    def __post_init__(self):
+        _identifier(self.project_id, "project id")
+        _required_text(self.title, "project title", limit=240)
+        _identifier(self.owner, "project owner")
+        _identifier(self.phase, "project phase")
+
+        if self.division not in {
+            "RESEARCH",
+            "BUSINESS",
+            "PERSONAL_GROWTH",
+        }:
+            raise IntentValidationError(
+                "Invalid project division."
+            )
+
+        if self.lineage not in {
+            "CANONICAL",
+            "EXPERIMENTAL_NONCANONICAL",
+            "HISTORICAL",
+        }:
+            raise IntentValidationError(
+                "Invalid project lineage."
+            )
+
+
+@dataclass(frozen=True)
+class AgentProposalRequest:
+    agent_id: str
+    division: str
+    role: str
+    capabilities: Tuple[str, ...]
+    status: str = "ACTIVE"
+
+    def __post_init__(self):
+        _identifier(self.agent_id, "agent id")
+
+        if self.agent_id == "personal_root":
+            raise IntentValidationError(
+                "Chat cannot draft changes to personal_root."
+            )
+
+        if self.division not in {
+            "RESEARCH",
+            "BUSINESS",
+            "PERSONAL_GROWTH",
+        }:
+            raise IntentValidationError(
+                "Invalid agent division."
+            )
+
+        if self.role not in {
+            "CONTROLLER",
+            "PRODUCER",
+            "AUDITOR",
+            "VALIDATOR",
+            "BUILDER",
+            "SPECIALIST",
+        }:
+            raise IntentValidationError("Invalid agent role.")
+
+        if self.status != "ACTIVE":
+            raise IntentValidationError(
+                "New chat-drafted agents must start ACTIVE."
+            )
+
+        if (
+            not isinstance(self.capabilities, tuple)
+            or not self.capabilities
+            or len(self.capabilities) > 20
+        ):
+            raise IntentValidationError(
+                "Agent capabilities are required."
+            )
+
+        for capability in self.capabilities:
+            _identifier(capability, "agent capability")
+
+
+ProposalRequest = Union[
+    TaskProposalRequest,
+    ProjectProposalRequest,
+    AgentProposalRequest,
+]
+
 
 @dataclass(frozen=True)
 class Intent:
     kind: IntentKind
     project_id: Optional[str] = None
     confidence: float = 1.0
+    proposal_request: Optional[ProposalRequest] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, IntentKind):
@@ -90,15 +238,42 @@ class Intent:
                 "Only PROJECT_DETAIL may carry project_id."
             )
 
+        expected_request_type = {
+            IntentKind.DRAFT_CREATE_TASK: TaskProposalRequest,
+            IntentKind.DRAFT_CREATE_PROJECT_REQUEST: (
+                ProjectProposalRequest
+            ),
+            IntentKind.DRAFT_CREATE_AGENT_REQUEST: (
+                AgentProposalRequest
+            ),
+        }.get(self.kind)
+
+        if expected_request_type is None:
+            if self.proposal_request is not None:
+                raise IntentValidationError(
+                    "Only draft intents may carry a proposal request."
+                )
+        elif not isinstance(
+            self.proposal_request,
+            expected_request_type,
+        ):
+            raise IntentValidationError(
+                "Draft intent has the wrong typed request."
+            )
+
 
 @dataclass(frozen=True)
 class ProjectSummary:
     project_id: str
+    title: str
     division: str
     phase: str
     state: str
     owner: str
     next_gate: Optional[str]
+    authorization_id: Optional[str]
+    auditor: Optional[str]
+    bound_auditors: Tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -118,6 +293,7 @@ class TaskSummary:
     task_type: str
     status: str
     assigned_agent: str
+    required_role: str
 
 
 @dataclass(frozen=True)

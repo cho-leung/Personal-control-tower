@@ -1,9 +1,15 @@
-"""One-shot and interactive terminal shell for the read-only chat slice."""
+"""One-shot and interactive shell for governed chat capabilities."""
 
 import sys
 
 from .adapters import DeterministicIntentAdapter, LLMAdapterError
 from .models import IntentValidationError
+from .planner import ProposalPlanner, ProposalPlanningError
+from .proposal_draft import (
+    ProposalDraftCommitError,
+    ProposalDraftError,
+    ProposalDraftSubmitter,
+)
 from .query import ChatQueryError, ControlTowerQueryService
 from .service import ConversationalChiefOfStaff
 
@@ -14,9 +20,14 @@ EXIT_WORDS = frozenset(
 
 
 def build_chat_service(vault_path, adapter=None):
+    query_service = ControlTowerQueryService(vault_path)
     return ConversationalChiefOfStaff(
         adapter=adapter or DeterministicIntentAdapter(),
-        query_service=ControlTowerQueryService(vault_path),
+        query_service=query_service,
+        planner=ProposalPlanner(),
+        proposal_submitter=ProposalDraftSubmitter(
+            query_service.vault
+        ),
     )
 
 
@@ -25,13 +36,24 @@ def _respond(service, message, output_stream, error_stream):
         response = service.respond(message)
     except KeyboardInterrupt:
         error_stream.write(
-            "Chat interrupted; no action was taken.\n"
+            "Chat interrupted; no approval or execution occurred. "
+            "If this was a drafting request, inspect ROOT inbox before "
+            "retrying.\n"
         )
         return 130
+    except ProposalDraftCommitError as exc:
+        error_stream.write(
+            "Proposal submission is incomplete; no approval, execution, "
+            "or organization state change occurred. "
+            f"Inspect ROOT inbox for {exc.proposal_id}.\n"
+        )
+        return 2
     except (
         ChatQueryError,
         IntentValidationError,
         LLMAdapterError,
+        ProposalDraftError,
+        ProposalPlanningError,
         TypeError,
         ValueError,
     ) as exc:
@@ -68,7 +90,8 @@ def run_chat(
 
     output_stream.write(
         "Personal Control Tower v3-alpha｜Chief of Staff\n"
-        "Milestone 1 is read-only. Type help or exit.\n"
+        "Queries are read-only; action requests can draft ROOT Proposals. "
+        "Type help or exit.\n"
     )
 
     while True:

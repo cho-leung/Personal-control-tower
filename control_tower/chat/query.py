@@ -183,6 +183,7 @@ class ControlTowerQueryService:
 
             for key, value in {
                 "project_id": state.project_id,
+                "title": state.title,
                 "phase": state.phase,
                 "owner": state.owner,
             }.items():
@@ -190,6 +191,49 @@ class ControlTowerQueryService:
                     raise ChatDataError(
                         f"Invalid project {key}: {state_path}"
                     )
+
+            if (
+                state.authorization_id is not None
+                and (
+                    not isinstance(state.authorization_id, str)
+                    or not state.authorization_id
+                )
+            ):
+                raise ChatDataError(
+                    f"Invalid project authorization: {state_path}"
+                )
+
+            if (
+                state.auditor is not None
+                and (
+                    not isinstance(state.auditor, str)
+                    or not state.auditor
+                )
+            ):
+                raise ChatDataError(
+                    f"Invalid project auditor: {state_path}"
+                )
+
+            if not isinstance(state.agents, dict):
+                raise ChatDataError(
+                    f"Invalid project bindings: {state_path}"
+                )
+
+            bound_auditors = state.agents.get("AUDITOR", [])
+
+            if isinstance(bound_auditors, str):
+                bound_auditors = [bound_auditors]
+
+            if (
+                not isinstance(bound_auditors, list)
+                or not all(
+                    isinstance(agent_id, str) and agent_id
+                    for agent_id in bound_auditors
+                )
+            ):
+                raise ChatDataError(
+                    f"Invalid auditor bindings: {state_path}"
+                )
 
             if state.project_id in seen_projects:
                 raise ChatDataError(
@@ -200,11 +244,15 @@ class ControlTowerQueryService:
             projects.append(
                 ProjectSummary(
                     project_id=state.project_id,
+                    title=state.title,
                     division=state.division.value,
                     phase=state.phase,
                     state=state.state.value,
                     owner=state.owner,
                     next_gate=state.next_gate,
+                    authorization_id=state.authorization_id,
+                    auditor=state.auditor,
+                    bound_auditors=tuple(bound_auditors),
                 )
             )
 
@@ -239,6 +287,7 @@ class ControlTowerQueryService:
                     task_type=task.task_type,
                     status=task.status.value,
                     assigned_agent=task.assigned_agent,
+                    required_role=task.required_role,
                 )
                 for task in project_tasks
             )

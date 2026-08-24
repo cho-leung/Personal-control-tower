@@ -1,16 +1,14 @@
 import argparse
-from dataclasses import replace
-from datetime import datetime, timezone
 from pathlib import Path
 
-from .agents import (
-    AgentRegistry,
-    AgentRole,
-    AgentStatus,
-)
+from .agents import AgentRegistry
 from .chief_of_staff import ChiefOfStaff
 from .chat.shell import run_chat
 from .core.decision_engine import DecisionEngine
+from .core.task_creation_engine import (
+    TaskCreationCommand,
+    TaskCreationEngine,
+)
 from .dashboard import render_dashboard
 from .decision import (
     approve_proposal,
@@ -18,10 +16,9 @@ from .decision import (
     reject_proposal,
 )
 from .demo import run_demo
-from .events import Event, EventLedger, EventResult
-from .guardrails import GovernanceError, assert_valid_auditor
+from .events import EventLedger
 from .handoffs import HandoffStore
-from .models import Role, State
+from .models import Role
 from .proposals import (
     create_agent_proposal,
     create_archive_agent_proposal,
@@ -33,7 +30,7 @@ from .proposals import (
 )
 from .status import render_status
 from .sync import sync_runtime
-from .tasks import Task, TaskStatus, TaskStore
+from .tasks import TaskStatus, TaskStore
 from .vault import Vault
 
 
@@ -155,197 +152,23 @@ def _write_and_report(vault_path, proposal):
     return path
 
 
-def _require_active_root(vault):
-    root = AgentRegistry(vault.root).get(
-        "personal_root"
-    )
-
-    if (
-        not root
-        or root.status != AgentStatus.ACTIVE
-        or root.role != AgentRole.ROOT
-        or "approve" not in root.capabilities
-    ):
-        raise GovernanceError(
-            "Operation requires an ACTIVE personal_root "
-            "with approve capability."
-        )
-
-    return root
-
-
 def _create_task(vault, args):
-    state_path = vault.find_state_path(args.project)
-    state = vault.read_state(state_path)
-    role = Role(args.role)
-    registry = AgentRegistry(vault.root)
-    _require_active_root(vault)
-
-    if role == Role.AUDITOR:
-        raise GovernanceError(
-            "Audit Tasks are created only by Root approval of "
-            "CREATE_AUDIT_REQUEST."
-        )
-
-    agent_id = args.agent or (
-        state.owner
-        if role == Role.PRODUCER
-        else state.auditor
-    )
-
-    if not agent_id:
-        raise ValueError(
-            f"No {role.value} assigned to project."
-        )
-
-    if state.state not in {
-            State.AUTHORIZED,
-            State.ACTIVE,
-        }:
-        raise ValueError(
-            "Task creation requires AUTHORIZED or ACTIVE project."
-        )
-
-    if not state.authorization_id:
-        raise GovernanceError(
-            "Task creation requires explicit Root authorization."
-        )
-
-    task_type = args.task_type or (
-        "PRODUCE_ARTIFACT"
-        if role == Role.PRODUCER
-        else role.value
-    )
-    capability = args.capability or {
-        Role.PRODUCER: "produce_artifact",
-        Role.AUDITOR: "audit",
-    }.get(role, task_type.lower())
-    agent = registry.get(agent_id)
-
-    if not agent or agent.status != AgentStatus.ACTIVE:
-        raise GovernanceError(
-            f"Unknown or inactive task agent: {agent_id}"
-        )
-
-    if agent.role.value != role.value:
-        raise GovernanceError(
-            "Task role does not match agent registry."
-        )
-
-    if capability not in agent.capabilities:
-        raise GovernanceError(
-            f"Task agent lacks capability: {capability}"
-        )
-
-    bound_members = []
-
-    for bound_role, members in (state.agents or {}).items():
-        bound_role_value = getattr(
-            bound_role,
-            "value",
-            bound_role,
-        )
-
-        if str(bound_role_value).upper() != role.value:
-            continue
-
-        bound_members.extend(
-            [members]
-            if isinstance(members, str)
-            else (members or [])
-        )
-
-    if agent_id not in bound_members:
-        raise GovernanceError(
-            f"Task agent is not bound as {role.value}: {agent_id}"
-        )
-
-    task_auditor = args.auditor
-
-    if role == Role.PRODUCER:
-        if not task_auditor:
-            auditors = (state.agents or {}).get(
-                Role.AUDITOR.value,
-                [],
-            )
-            task_auditor = (
-                auditors
-                if isinstance(auditors, str)
-                else (auditors[0] if auditors else None)
-            )
-
-        assert_valid_auditor(
-            replace(state, auditor=task_auditor),
-            registry.get(task_auditor),
-        )
-    timestamp = datetime.now(timezone.utc).strftime(
-        "%Y%m%d%H%M%S%f"
-    )
-    task_id = args.task_id or (
-        f"TASK-{state.project_id}-{state.phase}-"
-        f"{role.value}-{timestamp}"
-    )
-    store = TaskStore(state_path.parent)
-
-    if role == Role.PRODUCER:
-        for existing_task in store.list():
-            if existing_task.task_id == task_id:
-                continue
-
-            if (
-                existing_task.phase == state.phase
-                and existing_task.required_role
-                == Role.PRODUCER.value
-                and existing_task.status
-                != TaskStatus.COMPLETED
-            ):
-                raise GovernanceError(
-                    "Project phase already has unfinished "
-                    f"producer Task: {existing_task.task_id}"
-                )
-
-    event_id = f"EVT-{task_id}-CREATED"
-    task = Task(
-        task_id=task_id,
-        project_id=state.project_id,
-        phase=state.phase,
-        task_type=task_type,
-        assigned_agent=agent_id,
-        required_role=role.value,
-        required_capability=capability,
-        description=args.description,
-        context_refs=args.input_ref or [],
-        authorization_id=state.authorization_id,
-        causation_event_id=event_id,
-        metadata={
-            "auditor": task_auditor,
-            "created_by": "personal_root",
-        },
-    )
-    created = store.ensure(task)
-
-    if created.status == TaskStatus.CREATED:
-        created = store.assign(task_id)
-
-    EventLedger(vault).append_once(
-        Event(
-            event_id=event_id,
-            actor="personal_root",
-            action="TASK_CREATED",
-            target=state.project_id,
-            result=EventResult.SUCCESS,
-            capability_checked="approve",
-            note=args.description,
-            correlation_id=task_id,
-            metadata={
-                "task_id": task_id,
-            },
+    result = TaskCreationEngine(vault).create(
+        TaskCreationCommand(
+            project_id=args.project,
+            description=args.description,
+            task_id=args.task_id,
+            assigned_agent=args.agent,
+            role=args.role,
+            task_type=args.task_type,
+            capability=args.capability,
+            auditor=args.auditor,
+            context_refs=tuple(args.input_ref or []),
         )
     )
-    path = store.path_for(task_id)
-    print(f"Task assigned: {task_id}")
-    print(f"Task file: {path}")
-    return created
+    print(f"Task assigned: {result.task.task_id}")
+    print(f"Task file: {result.path}")
+    return result.task
 
 
 def _build_parser():
@@ -381,11 +204,11 @@ def _build_parser():
 
     chat = sub.add_parser(
         "chat",
-        help="Open the read-only v3-alpha Chief of Staff chat.",
+        help="Open the governed v3-alpha Chief of Staff chat.",
     )
     chat.add_argument(
         "--message",
-        help="Run one read-only chat turn and exit.",
+        help="Run one governed chat turn and exit.",
     )
 
     approve = sub.add_parser("approve")
@@ -518,8 +341,8 @@ def main():
     parser = _build_parser()
     args = parser.parse_args()
 
-    # Milestone 1 chat is deliberately routed before Vault initialization.
-    # A missing Vault fails closed instead of creating files during a query.
+    # Chat is deliberately routed before Vault initialization. A missing
+    # Vault fails closed instead of being created by a query or draft.
     if args.cmd == "chat":
         return run_chat(
             args.vault,

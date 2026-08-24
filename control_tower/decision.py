@@ -12,6 +12,10 @@ from .core.agent_lifecycle_engine import AgentLifecycleEngine
 from .core.audit_request_engine import AuditRequestEngine
 from .core.binding_engine import BindingEngine
 from .core.project_creation_engine import ProjectCreationEngine
+from .core.task_creation_engine import (
+    TaskCreationCommand,
+    TaskCreationEngine,
+)
 from .events import Event, EventLedger, EventResult
 from .guardrails import GovernanceError
 from .models import (
@@ -235,6 +239,64 @@ def execute_create_agent(vault_path, proposal):
     ).create_agent(proposal)
 
 
+def execute_create_task(vault_path, proposal):
+    payload = proposal.payload
+    expected_keys = {
+        "task_id",
+        "project_id",
+        "phase",
+        "task_type",
+        "assigned_agent",
+        "required_role",
+        "required_capability",
+        "description",
+        "context_refs",
+        "authorization_id",
+        "auditor",
+    }
+
+    if set(payload) != expected_keys:
+        raise GovernanceError(
+            "CREATE_TASK proposal payload schema mismatch."
+        )
+
+    project_id = payload["project_id"]
+
+    if proposal.target != project_id:
+        raise GovernanceError(
+            "Task proposal target does not match project_id."
+        )
+
+    if not isinstance(payload["context_refs"], list) or not all(
+        isinstance(ref, str) for ref in payload["context_refs"]
+    ):
+        raise GovernanceError(
+            "CREATE_TASK context_refs must be a list of strings."
+        )
+
+    result = TaskCreationEngine(
+        Vault(vault_path)
+    ).create(
+        TaskCreationCommand(
+            project_id=project_id,
+            description=payload["description"],
+            task_id=payload["task_id"],
+            assigned_agent=payload["assigned_agent"],
+            role=payload["required_role"],
+            task_type=payload["task_type"],
+            capability=payload["required_capability"],
+            auditor=payload["auditor"],
+            context_refs=tuple(payload["context_refs"]),
+            expected_phase=payload["phase"],
+            expected_authorization_id=(
+                payload["authorization_id"]
+            ),
+            proposal_id=proposal.proposal_id,
+        )
+    )
+    return result.path
+
+
 def execute_create_binding(vault_path, proposal):
     return BindingEngine(
         Vault(vault_path)
@@ -267,7 +329,10 @@ def execute_proposal(
     handlers = {
         "CREATE_RUNTIME": execute_create_runtime,
         "CREATE_PROJECT": execute_create_project,
+        "CREATE_PROJECT_REQUEST": execute_create_project,
         "CREATE_AGENT": execute_create_agent,
+        "CREATE_AGENT_REQUEST": execute_create_agent,
+        "CREATE_TASK": execute_create_task,
         "CREATE_BINDING": execute_create_binding,
         "CREATE_AUDIT_REQUEST": (
             execute_create_audit_request

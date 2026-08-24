@@ -42,7 +42,7 @@ control-tower --vault "$VAULT_PATH" dashboard
 
 Do not rely on the default `vault` path for valuable data in scripts. An explicit path makes destructive demo operations and production data harder to confuse.
 
-## Use the read-only Chief of Staff chat
+## Use the governed Chief of Staff chat
 
 Start an interactive session:
 
@@ -68,7 +68,35 @@ control-tower --vault "$VAULT_PATH" chat \
   --message "帮我看看我现在所有项目状态"
 ```
 
-Milestone 1 is strictly read-only. Planning, creation, approval, execution, and organization changes return a guarded response and perform no operation. Chat does not create a missing Vault, append query Events, read artifact bodies, or expose project/event notes. Run `init` explicitly before querying a new Vault.
+Query turns are strictly read-only. Chat does not create a missing Vault, append query Events, read artifact bodies, or expose project/event notes. Run `init` explicitly before querying a new Vault.
+
+Milestone 2 can register typed Proposal drafts. To draft a Producer Task for an existing project, the project must already be `AUTHORIZED` or `ACTIVE`, carry a Root authorization, and have an ACTIVE bound Producer plus an independent ACTIVE bound Auditor:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat \
+  --message "advance project CAREER-OS"
+```
+
+The response includes the full Proposal ID. Drafting writes only a `WAITING_ROOT` Proposal and `PROPOSAL_DRAFTED` Event. It does not create or execute the Task. Review and decide in separate commands:
+
+```bash
+control-tower --vault "$VAULT_PATH" inspect <FULL_PROPOSAL_ID>
+control-tower --vault "$VAULT_PATH" approve <FULL_PROPOSAL_ID>
+# or
+control-tower --vault "$VAULT_PATH" reject <FULL_PROPOSAL_ID> \
+  --note "Not a priority this week."
+```
+
+Approval of `CREATE_TASK` creates one `ASSIGNED` Producer Task and stops. Run `tick` or `task-run` separately when Root is ready to execute it.
+
+The offline adapter also accepts explicit project and Agent draft forms. Required facts must be supplied; it does not invent them:
+
+```text
+create project CAREER-OS title="Career OS" division=PERSONAL_GROWTH owner=career_producer
+create agent career_producer division=PERSONAL_GROWTH role=PRODUCER capabilities=produce_artifact
+```
+
+`CREATE_PROJECT_REQUEST` and `CREATE_AGENT_REQUEST` remain visible under those exact types in ROOT inbox, then reuse the existing Project and Agent creation engines after approval. Approval, rejection, execution, `tick`, deletion and archive instructions are never accepted through Chat. A mixed request fails closed without a Proposal.
 
 ## Run the disposable demo
 
@@ -264,7 +292,7 @@ control-tower --vault "$VAULT_PATH" authorize \
 ### Observation and reconciliation
 
 ```text
-chat [--message TEXT]        Read-only Chief of Staff query interface.
+chat [--message TEXT]        Queries or drafts a Root-gated Proposal.
 init                         Create missing vault structure and defaults.
 status                       Render registry/runtime consistency status.
 dashboard                    Show projects, agents, Tasks, and Root inbox.

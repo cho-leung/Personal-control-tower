@@ -30,7 +30,39 @@ class ProposalFactory:
             )
 
 
+        if action_type in {
+            "CREATE_TASK",
+            "CREATE_PROJECT_REQUEST",
+            "CREATE_AGENT_REQUEST",
+        }:
+
+            return self.create_chat_proposal(
+                action
+            )
+
+
         return None
+
+
+
+    def create_chat_proposal(
+        self,
+        action
+    ):
+
+        return create_proposal(
+
+            proposal_type=action["action"],
+
+            target=action["target"],
+
+            reason=action["reason"],
+
+            created_by="conversational_chief_of_staff",
+
+            payload=dict(action["payload"])
+
+        )
 
 
 

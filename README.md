@@ -2,7 +2,7 @@
 
 Personal Control Tower is a local-first CLI control plane for governed projects, agents, tasks, and handoffs. Its vault is made of readable Markdown, YAML, and JSONL files, so the operating record remains inspectable without a database or hosted service.
 
-The v3 alpha is an incremental upgrade over the tagged v1 governance kernel, not a rewrite. Milestone 1 adds a read-only Chief of Staff chat entry while preserving every v1 command and authority boundary. Root still approves consequential changes, producers and auditors remain independent, artifacts are frozen by SHA-256, and the included task runtime is deterministic. It does not send messages, spend money, deploy software, or perform other external actions.
+The v3 alpha is an incremental upgrade over the tagged v1 governance kernel, not a rewrite. Milestones 1 and 2 add a Chief of Staff chat entry for read-only organization queries and typed Proposal drafting while preserving every v1 command and authority boundary. Root still approves consequential changes, producers and auditors remain independent, artifacts are frozen by SHA-256, and the included task runtime is deterministic. It does not send messages, spend money, deploy software, or perform other external actions.
 
 ## What it provides
 
@@ -11,7 +11,7 @@ The v3 alpha is an incremental upgrade over the tagged v1 governance kernel, not
 - Agent lifecycle management for status, role, capabilities, and project membership.
 - Durable project-local Tasks and immutable, acknowledged Handoffs.
 - A deterministic `MockAgentRuntime` and one-step `ChiefOfStaff` tick loop.
-- A provider-neutral `LLMAdapter` contract and offline `control-tower chat` interface for typed, read-only organization queries.
+- A provider-neutral `LLMAdapter` contract and offline `control-tower chat` interface for typed queries and Root-gated Proposal drafting.
 - An append-only event ledger, decision log, dashboard, and human-readable evidence files.
 - Idempotent creation and replay checks: the same identity plus the same evidence is safe; conflicting evidence is rejected.
 
@@ -80,7 +80,7 @@ For complete examples and command arguments, see [Usage](docs/USAGE.md).
 
 ## Talk to the Chief of Staff
 
-Milestone 1 supports read-only natural-language queries with no API key:
+The default adapter supports bounded natural-language queries and Proposal requests with no API key:
 
 ```bash
 control-tower --vault "$VAULT_PATH" chat
@@ -93,9 +93,29 @@ control-tower --vault "$VAULT_PATH" chat \
   --message "帮我看看我现在所有项目状态"
 ```
 
-The default deterministic adapter recognizes a bounded set of Chinese and English query intents. The local query service reads project state, Agent Registry, Tasks, Root inbox, attention items, and recent events. It does not read artifact bodies, and it never exposes private notes to the adapter or response. Read turns do not append Events.
+The local query service reads project state, Agent Registry, Tasks, Root inbox, attention items, and recent events. It does not read artifact bodies, and it never exposes private notes to the adapter or response. Read turns do not append Events.
 
-Milestone 1 deliberately rejects planning and mutation requests such as “推进项目”, “批准 proposal”, or “执行 task”. It creates no Proposal and invokes no Task. A missing or damaged Vault fails closed instead of being reported as an empty organization.
+Milestone 2 adds three typed, strictly allowlisted draft types:
+
+- `CREATE_TASK`
+- `CREATE_PROJECT_REQUEST`
+- `CREATE_AGENT_REQUEST`
+
+For example, if an authorized `CAREER-OS` has an eligible Producer and independent Auditor:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat \
+  --message "Help me advance my AI career"
+```
+
+This registers a deterministic `WAITING_ROOT` Proposal and a `PROPOSAL_DRAFTED` Event. It does not create or run a Task. Root must inspect and decide the Proposal separately:
+
+```bash
+control-tower --vault "$VAULT_PATH" inspect <FULL_PROPOSAL_ID>
+control-tower --vault "$VAULT_PATH" approve <FULL_PROPOSAL_ID>
+```
+
+Chat never accepts approval, rejection, execution, `tick`, or direct organization changes. Mixed requests such as “create and approve this task” fail closed. A missing, damaged, ambiguous, or stale Vault also fails closed.
 
 ## Safe synthetic demo
 

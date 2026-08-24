@@ -51,6 +51,33 @@ class ProposalRouter:
             },
 
 
+            "CREATE_PROJECT_REQUEST": {
+
+                "handler": "ProjectEngine",
+
+                "action": "CREATE_PROJECT"
+
+            },
+
+
+            "CREATE_AGENT_REQUEST": {
+
+                "handler": "AgentRegistry",
+
+                "action": "CREATE_AGENT"
+
+            },
+
+
+            "CREATE_TASK": {
+
+                "handler": "TaskCreationEngine",
+
+                "action": "CREATE_TASK"
+
+            },
+
+
             "CREATE_BINDING": {
 
                 "handler": "BindingEngine",

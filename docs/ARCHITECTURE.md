@@ -6,12 +6,15 @@ Personal Control Tower 3.0 alpha is a Python 3.9+ CLI application backed by a lo
 
 ```text
 User
- |-- read query --> Chat -> LLMAdapter -> Intent -> QueryService --|
- |                                                                v
- |-- command ----> CLI / ControlTowerBus --> governance engines --> stores
-                                                 ^                  |
-                                                 |                  v
-                                  Root decisions / ChiefOfStaff    vault
+ |-- chat --> LLMAdapter -> typed Intent --> Query / pure Planner
+ |                                      |             |
+ |                                      v             v
+ |                                  snapshot     ProposalDraft
+ |                                                    |
+ |                                                    v
+ |-- command --> CLI / ControlTowerBus --> ROOT --> governance engines
+ |                                                    |
+ +------------------------- stores / local vault <----+
 ```
 
 ### CLI and adapters
@@ -20,9 +23,9 @@ User
 
 Neither layer owns canonical state. They coordinate the lower-level engines and stores.
 
-### Read-only chat interface
+### Governed chat interface
 
-Milestone 1 introduces a capability-limited conversational path:
+Milestone 1 introduced a capability-limited query path. Milestone 2 adds a separate Proposal drafting branch:
 
 ```text
 user utterance
@@ -38,13 +41,28 @@ ControlTowerQueryService
     |
     v
 TowerSnapshot -> deterministic presenter
+
+typed draft Intent + TowerSnapshot
+    |
+    v
+ProposalPlanner (pure)
+    |
+    v
+ProposalDraft (strict allowlist)
+    |
+    v
+ProposalFactory -> ROOT inbox -> inspect -> approve/reject
 ```
 
 `LLMAdapter` is provider-neutral. The default `DeterministicIntentAdapter` runs offline; future OpenAI, Anthropic, or local adapters must return the same validated `Intent` contract. An adapter receives the user utterance but no Vault mutation capability.
 
 The query service reads `STATE.md`, `agents.yaml`, project Tasks, Root inbox metadata, and recent Event Ledger records. Its snapshot deliberately excludes artifact bodies, project notes, event notes, proposal reasons, and memory. It does not initialize a Vault or instantiate `EventLedger`, because both would turn a read into a write.
 
-`ConversationalChiefOfStaff` is distinct from the existing execution coordinator. It owns only an adapter and query service. It cannot call `tick`, approve/reject, create Tasks, write Proposals, or change State. Mutation and planning requests fail closed in Milestone 1. Read-only turns are not written to the Event Ledger; no governed action occurred, and preserving zero-mutation queries is an explicit acceptance property.
+`ConversationalChiefOfStaff` is distinct from the existing execution coordinator. It cannot call `tick`, approve, reject, execute Tasks, update registries, or change Project State. Its only bounded mutation capability is `ProposalDraftSubmitter`, which accepts a locally validated `ProposalDraft`, reuses the existing `ProposalFactory` and serializer, and registers `WAITING_ROOT` evidence.
+
+The adapter cannot choose `proposal_id`, `created_by`, state, authorization, handler, or an arbitrary payload. It can only return a discriminated typed Intent. The pure Planner resolves that Intent against the safe snapshot and creates one of `CREATE_TASK`, `CREATE_PROJECT_REQUEST`, or `CREATE_AGENT_REQUEST`. Unknown, incomplete, ambiguous, mixed privileged, or stale requests fail closed.
+
+Read-only turns remain byte-for-byte zero mutation and are not written to the Event Ledger. Draft submission creates only the Proposal plus its deterministic `PROPOSAL_DRAFTED` Event. It does not change a Project, Agent, Task, Handoff, Artifact, Audit, decision log, or runtime state.
 
 ### Governance engines
 
@@ -57,6 +75,7 @@ Engines own concrete state changes:
 - audit-request admission;
 - independent audit recording;
 - proposal routing and execution.
+- Root-approved ordinary Task creation and assignment.
 
 Guardrails validate legal transitions, actor ownership, lifecycle status, role, capability, frozen evidence, assigned auditor identity, and producer/auditor independence.
 
@@ -65,6 +84,8 @@ Guardrails validate legal transitions, actor ownership, lifecycle status, role, 
 Tasks and Handoffs form the project-local work plane. The `ChiefOfStaff` selects eligible Tasks when `tick` is invoked, validates them against canonical project and agent state, calls an `AgentRuntime`, and persists the bounded result.
 
 `MockAgentRuntime` is the default v1 executor. It is deterministic and local. Runtime output is data; governance engines decide whether that data is sufficient to change canonical state.
+
+`TaskCreationEngine` is not a runtime. It revalidates the live project phase, authorization, owner, binding, capability, and independent auditor when Root approves `CREATE_TASK`. It creates one idempotent `ASSIGNED` Producer Task and stops; a later explicit `tick` or `task-run` is still required to execute it.
 
 ### Persistence
 
@@ -120,6 +141,8 @@ A proposal follows this execution boundary:
 5. Approval routes the proposal type to one engine; rejection performs no proposed operation.
 6. Successful evidence is recorded with a proposal-specific event ID.
 7. The proposal becomes `EXECUTED` or `REJECTED`, moves to `archive/`, and is appended to `DECISION_LOG.md`.
+
+`CREATE_PROJECT_REQUEST` and `CREATE_AGENT_REQUEST` are chat-facing Proposal types that route as narrow aliases to the existing Project and Agent creation engines. Existing `CREATE_PROJECT` and `CREATE_AGENT` behavior is unchanged. `CREATE_TASK` routes to `TaskCreationEngine`; it never calls the runtime.
 
 An engine must validate before it writes. Exact replay is idempotent; conflicting evidence must fail rather than overwrite. Archived evidence is used to recognize a completed replay.
 
@@ -226,7 +249,7 @@ The existing `control_tower.chief_of_staff.ChiefOfStaff` is a deterministic exec
 
 It does not approve proposals, change Root policy, authorize phases, or execute external side effects. A future durable queue can call the same bounded operation without changing these authority boundaries.
 
-The chat-layer `ConversationalChiefOfStaff` has a smaller capability set: typed intent interpretation and pure queries only. Keeping the two classes separate prevents a natural-language query from accidentally executing assigned work.
+The chat-layer `ConversationalChiefOfStaff` has a smaller capability set: typed intent interpretation, pure queries and Planner analysis, plus submission of validated Proposal evidence. Keeping the two classes separate prevents a natural-language request from approving or executing assigned work.
 
 ## Failure and replay model
 
