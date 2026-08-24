@@ -1,23 +1,17 @@
 # Architecture
 
-Personal Control Tower 1.0 is a Python 3.9+ CLI application backed by a local filesystem vault. It favors explicit transitions and inspectable evidence over background automation.
+Personal Control Tower 3.0 alpha is a Python 3.9+ CLI application backed by a local filesystem vault. It preserves the tagged v1 governance kernel and adds capabilities through vertical slices. It favors explicit transitions and inspectable evidence over background automation.
 
 ## Layers
 
 ```text
-CLI and ControlTowerBus adapters
-                |
-                v
-Root decisions / ChiefOfStaff reconciliation
-                |
-                v
-Governance engines and guardrails
-                |
-                v
-Project, proposal, agent, Task, Handoff, audit, event stores
-                |
-                v
-Local Markdown / YAML / JSONL vault
+User
+ |-- read query --> Chat -> LLMAdapter -> Intent -> QueryService --|
+ |                                                                v
+ |-- command ----> CLI / ControlTowerBus --> governance engines --> stores
+                                                 ^                  |
+                                                 |                  v
+                                  Root decisions / ChiefOfStaff    vault
 ```
 
 ### CLI and adapters
@@ -25,6 +19,32 @@ Local Markdown / YAML / JSONL vault
 `control_tower.cli` parses commands and renders user-facing results. Global arguments, including `--vault`, are resolved before a subcommand. `ControlTowerBus` is the programmatic adapter used by the demo and integrations.
 
 Neither layer owns canonical state. They coordinate the lower-level engines and stores.
+
+### Read-only chat interface
+
+Milestone 1 introduces a capability-limited conversational path:
+
+```text
+user utterance
+    |
+    v
+LLMAdapter.classify()
+    |
+    v
+allowlisted typed Intent
+    |
+    v
+ControlTowerQueryService
+    |
+    v
+TowerSnapshot -> deterministic presenter
+```
+
+`LLMAdapter` is provider-neutral. The default `DeterministicIntentAdapter` runs offline; future OpenAI, Anthropic, or local adapters must return the same validated `Intent` contract. An adapter receives the user utterance but no Vault mutation capability.
+
+The query service reads `STATE.md`, `agents.yaml`, project Tasks, Root inbox metadata, and recent Event Ledger records. Its snapshot deliberately excludes artifact bodies, project notes, event notes, proposal reasons, and memory. It does not initialize a Vault or instantiate `EventLedger`, because both would turn a read into a write.
+
+`ConversationalChiefOfStaff` is distinct from the existing execution coordinator. It owns only an adapter and query service. It cannot call `tick`, approve/reject, create Tasks, write Proposals, or change State. Mutation and planning requests fail closed in Milestone 1. Read-only turns are not written to the Event Ledger; no governed action occurred, and preserving zero-mutation queries is an explicit acceptance property.
 
 ### Governance engines
 
@@ -192,9 +212,9 @@ Agent identity is global to the vault; project participation is local to a proje
 
 Agent lifecycle changes are proposal-driven and Root-governed. Safety checks protect `personal_root`, active owners and auditors, and agents with unfinished Tasks. Role changes reconcile non-owner bindings. Archiving preserves the registry record and historical references.
 
-## ChiefOfStaff boundary
+## Execution ChiefOfStaff boundary
 
-The ChiefOfStaff is a deterministic coordinator with no independent governance authority. Each tick:
+The existing `control_tower.chief_of_staff.ChiefOfStaff` is a deterministic execution coordinator with no independent governance authority. It is not exposed to the chat adapter. Each tick:
 
 1. discovers eligible work;
 2. validates project state, authorization, agent status, role, capability, and inputs;
@@ -205,6 +225,8 @@ The ChiefOfStaff is a deterministic coordinator with no independent governance a
 7. stops.
 
 It does not approve proposals, change Root policy, authorize phases, or execute external side effects. A future durable queue can call the same bounded operation without changing these authority boundaries.
+
+The chat-layer `ConversationalChiefOfStaff` has a smaller capability set: typed intent interpretation and pure queries only. Keeping the two classes separate prevents a natural-language query from accidentally executing assigned work.
 
 ## Failure and replay model
 

@@ -9,6 +9,7 @@ from .agents import (
     AgentStatus,
 )
 from .chief_of_staff import ChiefOfStaff
+from .chat.shell import run_chat
 from .core.decision_engine import DecisionEngine
 from .dashboard import render_dashboard
 from .decision import (
@@ -349,7 +350,7 @@ def _create_task(vault, args):
 
 def _build_parser():
     parser = argparse.ArgumentParser(
-        description="Personal Control Tower v1"
+        description="Personal Control Tower v3-alpha"
     )
     parser.add_argument(
         "--vault",
@@ -376,6 +377,15 @@ def _build_parser():
         "--reset",
         action="store_true",
         help="Delete and rebuild only the explicitly selected demo vault.",
+    )
+
+    chat = sub.add_parser(
+        "chat",
+        help="Open the read-only v3-alpha Chief of Staff chat.",
+    )
+    chat.add_argument(
+        "--message",
+        help="Run one read-only chat turn and exit.",
     )
 
     approve = sub.add_parser("approve")
@@ -507,6 +517,15 @@ def _build_parser():
 def main():
     parser = _build_parser()
     args = parser.parse_args()
+
+    # Milestone 1 chat is deliberately routed before Vault initialization.
+    # A missing Vault fails closed instead of creating files during a query.
+    if args.cmd == "chat":
+        return run_chat(
+            args.vault,
+            message=args.message,
+        )
+
     vault = Vault(args.vault)
     vault.ensure_structure()
 
@@ -773,6 +792,8 @@ def main():
                 f"{','.join(agent.capabilities)}"
             )
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -15,7 +15,7 @@ ROOT = Path(__file__).parent
 
 setup(
     name="personal-control-tower-bus",
-    version="1.0.0",
+    version="3.0.0a1",
     description=(
         "Local-first, Root-governed CLI control tower for projects, "
         "agents, tasks, and auditable handoffs"

@@ -42,6 +42,34 @@ control-tower --vault "$VAULT_PATH" dashboard
 
 Do not rely on the default `vault` path for valuable data in scripts. An explicit path makes destructive demo operations and production data harder to confuse.
 
+## Use the read-only Chief of Staff chat
+
+Start an interactive session:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat
+```
+
+Example questions:
+
+```text
+帮我看看我现在所有项目状态
+查看项目 VISION-OS
+查看任务
+查看有哪些待批准 Proposal
+哪些项目需要关注
+查看最近事件
+```
+
+Type `help` for the current intent set and `exit` to leave. For a single turn:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat \
+  --message "帮我看看我现在所有项目状态"
+```
+
+Milestone 1 is strictly read-only. Planning, creation, approval, execution, and organization changes return a guarded response and perform no operation. Chat does not create a missing Vault, append query Events, read artifact bodies, or expose project/event notes. Run `init` explicitly before querying a new Vault.
+
 ## Run the disposable demo
 
 `demo --reset` deletes and rebuilds the selected vault. Never select a live or valuable vault.
@@ -236,6 +264,7 @@ control-tower --vault "$VAULT_PATH" authorize \
 ### Observation and reconciliation
 
 ```text
+chat [--message TEXT]        Read-only Chief of Staff query interface.
 init                         Create missing vault structure and defaults.
 status                       Render registry/runtime consistency status.
 dashboard                    Show projects, agents, Tasks, and Root inbox.

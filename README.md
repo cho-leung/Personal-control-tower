@@ -1,8 +1,8 @@
-# Personal Control Tower 1.0
+# Personal Control Tower 3.0 Alpha
 
 Personal Control Tower is a local-first CLI control plane for governed projects, agents, tasks, and handoffs. Its vault is made of readable Markdown, YAML, and JSONL files, so the operating record remains inspectable without a database or hosted service.
 
-Version 1.0 is deliberately conservative: Root approves consequential changes, producers and auditors remain independent, artifacts are frozen by SHA-256, and the included agent runtime is a deterministic mock. It does not send messages, spend money, deploy software, or perform other external actions.
+The v3 alpha is an incremental upgrade over the tagged v1 governance kernel, not a rewrite. Milestone 1 adds a read-only Chief of Staff chat entry while preserving every v1 command and authority boundary. Root still approves consequential changes, producers and auditors remain independent, artifacts are frozen by SHA-256, and the included task runtime is deterministic. It does not send messages, spend money, deploy software, or perform other external actions.
 
 ## What it provides
 
@@ -11,6 +11,7 @@ Version 1.0 is deliberately conservative: Root approves consequential changes, p
 - Agent lifecycle management for status, role, capabilities, and project membership.
 - Durable project-local Tasks and immutable, acknowledged Handoffs.
 - A deterministic `MockAgentRuntime` and one-step `ChiefOfStaff` tick loop.
+- A provider-neutral `LLMAdapter` contract and offline `control-tower chat` interface for typed, read-only organization queries.
 - An append-only event ledger, decision log, dashboard, and human-readable evidence files.
 - Idempotent creation and replay checks: the same identity plus the same evidence is safe; conflicting evidence is rejected.
 
@@ -68,7 +69,7 @@ control-tower --vault "$VAULT_PATH" dashboard
 The principal commands are:
 
 ```text
-dashboard, status, sync
+chat, dashboard, status, sync
 inspect, approve, reject
 project-create, bind, authorize, decide
 agent-create, agent-archive, agent-role, agent-capability
@@ -76,6 +77,25 @@ task-create, tick
 ```
 
 For complete examples and command arguments, see [Usage](docs/USAGE.md).
+
+## Talk to the Chief of Staff
+
+Milestone 1 supports read-only natural-language queries with no API key:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat
+```
+
+Or run one turn for scripts and tests:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat \
+  --message "帮我看看我现在所有项目状态"
+```
+
+The default deterministic adapter recognizes a bounded set of Chinese and English query intents. The local query service reads project state, Agent Registry, Tasks, Root inbox, attention items, and recent events. It does not read artifact bodies, and it never exposes private notes to the adapter or response. Read turns do not append Events.
+
+Milestone 1 deliberately rejects planning and mutation requests such as “推进项目”, “批准 proposal”, or “执行 task”. It creates no Proposal and invokes no Task. A missing or damaged Vault fails closed instead of being reported as an empty organization.
 
 ## Safe synthetic demo
 
