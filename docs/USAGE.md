@@ -70,6 +70,39 @@ control-tower --vault "$VAULT_PATH" chat \
 
 Query turns are strictly read-only. Chat does not create a missing Vault, append query Events, read artifact bodies, or expose project/event notes. Run `init` explicitly before querying a new Vault.
 
+### Select the understanding provider
+
+Chat remains deterministic and offline unless another provider is explicitly selected:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat --provider offline
+```
+
+For OpenAI, copy the tracked template to the ignored local file and fill in your own values:
+
+```bash
+cp .env.example .env
+```
+
+```dotenv
+LLM_PROVIDER=openai
+LLM_MODEL=your-structured-output-capable-model
+OPENAI_API_KEY=your-api-key
+LLM_TIMEOUT_SECONDS=30
+```
+
+Load that exact file for one-shot or interactive chat:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat \
+  --llm-config .env \
+  --message "What should I focus on across my projects today?"
+```
+
+Configuration precedence is CLI `--provider`/`--model`, then process environment, then the explicitly supplied dotenv file. No dotenv file is discovered automatically. Never commit `.env` or put the API key in a CLI argument.
+
+OpenAI receives the current user message. It does not receive the Vault, snapshot, artifacts, event notes, proposal reasons, or API key as model input. The backend has no tools and cannot call approve, reject, execute, `tick`, or a registry/state writer. A provider error fails closed without deterministic fallback. Use `--provider offline` whenever the message must stay entirely local.
+
 Milestone 2 can register typed Proposal drafts. To draft a Producer Task for an existing project, the project must already be `AUTHORIZED` or `ACTIVE`, carry a Root authorization, and have an ACTIVE bound Producer plus an independent ACTIVE bound Auditor:
 
 ```bash
@@ -292,7 +325,8 @@ control-tower --vault "$VAULT_PATH" authorize \
 ### Observation and reconciliation
 
 ```text
-chat [--message TEXT]        Queries or drafts a Root-gated Proposal.
+chat [--message TEXT] [--provider offline|openai] [--model MODEL]
+     [--llm-config PATH]     Queries or drafts a Root-gated Proposal.
 init                         Create missing vault structure and defaults.
 status                       Render registry/runtime consistency status.
 dashboard                    Show projects, agents, Tasks, and Root inbox.

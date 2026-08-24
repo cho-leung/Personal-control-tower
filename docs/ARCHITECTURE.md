@@ -1,17 +1,22 @@
 # Architecture
 
-Personal Control Tower 3.0 alpha is a Python 3.9+ CLI application backed by a local filesystem vault. It preserves the tagged v1 governance kernel and adds capabilities through vertical slices. It favors explicit transitions and inspectable evidence over background automation.
+Personal Control Tower 3.0 alpha.1 is a Python 3.9+ CLI application backed by a local filesystem vault. It preserves the tagged v1 governance kernel and adds capabilities through vertical slices. It favors explicit transitions and inspectable evidence over background automation.
 
 ## Layers
 
 ```text
 User
- |-- chat --> LLMAdapter -> typed Intent --> Query / pure Planner
- |                                      |             |
- |                                      v             v
- |                                  snapshot     ProposalDraft
- |                                                    |
- |                                                    v
+ |-- chat --> preflight --> offline parser / LLMProvider
+ |                                  |
+ |                           typed LLMAdapter
+ |                                  |
+ |                         existing typed Intent
+ |                                  |
+ |                         Query / pure Planner
+ |                           |              |
+ |                       snapshot     ProposalDraft
+ |                                          |
+ |                                          v
  |-- command --> CLI / ControlTowerBus --> ROOT --> governance engines
  |                                                    |
  +------------------------- stores / local vault <----+
@@ -25,16 +30,20 @@ Neither layer owns canonical state. They coordinate the lower-level engines and 
 
 ### Governed chat interface
 
-Milestone 1 introduced a capability-limited query path. Milestone 2 adds a separate Proposal drafting branch:
+Milestone 1 introduced a capability-limited query path. Milestone 2 added a separate Proposal drafting branch. Alpha.1 makes the understanding layer selectable without moving any governance authority:
 
 ```text
 user utterance
     |
     v
-LLMAdapter.classify()
+local normalization + privileged-action preflight
     |
-    v
-allowlisted typed Intent
+    +--> deterministic offline parser
+    |
+    +--> LLMProvider -> strict structured JSON -> local decoder
+                          |
+                          v
+                   existing typed Intent
     |
     v
 ControlTowerQueryService
@@ -54,13 +63,19 @@ ProposalDraft (strict allowlist)
 ProposalFactory -> ROOT inbox -> inspect -> approve/reject
 ```
 
-`LLMAdapter` is provider-neutral. The default `DeterministicIntentAdapter` runs offline; future OpenAI, Anthropic, or local adapters must return the same validated `Intent` contract. An adapter receives the user utterance but no Vault mutation capability.
+`LLMAdapter` remains the trusted typed boundary consumed by `ConversationalChiefOfStaff`. The default `DeterministicIntentAdapter` runs offline. `ProviderIntentAdapter` bridges an untrusted `LLMProvider` response into the same existing dataclasses. Future Gemini, DeepSeek, Anthropic, or local providers can implement the provider interface without changing the Planner or governance kernel.
+
+`OpenAIResponsesProvider` calls the fixed official Responses API endpoint using the Python standard library. It requests strict JSON Schema output, sets `store=false`, applies a finite timeout and output bound, and supplies no tools or functions. The provider receives only the normalized current user message, static instructions, and the intent schema. It never receives Vault paths, project snapshots, artifact bodies, events, writers, governance functions, or credentials as prompt data.
+
+Structured output is still untrusted. The local decoder rejects malformed JSON, Markdown wrappers, duplicate keys, non-finite numbers, extra or missing fields, unknown intent kinds, wrong request discriminators, canonical-state injection, and invalid typed requests. Task objectives always use the locally normalized original message so provider paraphrasing cannot create stochastic Proposal identities. Draft intents below the local confidence threshold do not enter the Root inbox.
 
 The query service reads `STATE.md`, `agents.yaml`, project Tasks, Root inbox metadata, and recent Event Ledger records. Its snapshot deliberately excludes artifact bodies, project notes, event notes, proposal reasons, and memory. It does not initialize a Vault or instantiate `EventLedger`, because both would turn a read into a write.
 
 `ConversationalChiefOfStaff` is distinct from the existing execution coordinator. It cannot call `tick`, approve, reject, execute Tasks, update registries, or change Project State. Its only bounded mutation capability is `ProposalDraftSubmitter`, which accepts a locally validated `ProposalDraft`, reuses the existing `ProposalFactory` and serializer, and registers `WAITING_ROOT` evidence.
 
 The adapter cannot choose `proposal_id`, `created_by`, state, authorization, handler, or an arbitrary payload. It can only return a discriminated typed Intent. The pure Planner resolves that Intent against the safe snapshot and creates one of `CREATE_TASK`, `CREATE_PROJECT_REQUEST`, or `CREATE_AGENT_REQUEST`. Unknown, incomplete, ambiguous, mixed privileged, or stale requests fail closed.
+
+Provider selection is explicit. `offline` is the default. `openai` requires a model and API key from process environment or an explicitly selected dotenv file. Unknown providers, missing credentials, provider refusals, timeouts, and invalid output return a controlled error; the system never silently switches to a different interpretation path.
 
 Read-only turns remain byte-for-byte zero mutation and are not written to the Event Ledger. Draft submission creates only the Proposal plus its deterministic `PROPOSAL_DRAFTED` Event. It does not change a Project, Agent, Task, Handoff, Artifact, Audit, decision log, or runtime state.
 

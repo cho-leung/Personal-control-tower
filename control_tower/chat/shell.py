@@ -2,7 +2,12 @@
 
 import sys
 
-from .adapters import DeterministicIntentAdapter, LLMAdapterError
+from .adapters import LLMAdapterError
+from .config import (
+    LLMConfigurationError,
+    LLMSettings,
+    build_intent_adapter,
+)
 from .models import IntentValidationError
 from .planner import ProposalPlanner, ProposalPlanningError
 from .proposal_draft import (
@@ -19,10 +24,28 @@ EXIT_WORDS = frozenset(
 )
 
 
-def build_chat_service(vault_path, adapter=None):
+def build_chat_service(
+    vault_path,
+    adapter=None,
+    settings=None,
+    provider=None,
+):
+    if adapter is not None and (settings is not None or provider is not None):
+        raise LLMConfigurationError(
+            "Explicit adapter cannot be combined with provider settings."
+        )
+
+    resolved_adapter = (
+        adapter
+        if adapter is not None
+        else build_intent_adapter(
+            settings if settings is not None else LLMSettings(),
+            provider=provider,
+        )
+    )
     query_service = ControlTowerQueryService(vault_path)
     return ConversationalChiefOfStaff(
-        adapter=adapter or DeterministicIntentAdapter(),
+        adapter=resolved_adapter,
         query_service=query_service,
         planner=ProposalPlanner(),
         proposal_submitter=ProposalDraftSubmitter(
@@ -71,6 +94,8 @@ def run_chat(
     vault_path,
     message=None,
     adapter=None,
+    settings=None,
+    provider=None,
     input_stream=None,
     output_stream=None,
     error_stream=None,
@@ -78,7 +103,19 @@ def run_chat(
     input_stream = input_stream or sys.stdin
     output_stream = output_stream or sys.stdout
     error_stream = error_stream or sys.stderr
-    service = build_chat_service(vault_path, adapter=adapter)
+    try:
+        service = build_chat_service(
+            vault_path,
+            adapter=adapter,
+            settings=settings,
+            provider=provider,
+        )
+    except (LLMConfigurationError, TypeError, ValueError) as exc:
+        error_stream.write(
+            "Chat unavailable; no action was taken: "
+            f"{exc}\n"
+        )
+        return 2
 
     if message is not None:
         return _respond(
@@ -89,7 +126,7 @@ def run_chat(
         )
 
     output_stream.write(
-        "Personal Control Tower v3-alpha｜Chief of Staff\n"
+        "Personal Control Tower v3-alpha.1｜Chief of Staff\n"
         "Queries are read-only; action requests can draft ROOT Proposals. "
         "Type help or exit.\n"
     )

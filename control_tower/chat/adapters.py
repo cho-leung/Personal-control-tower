@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 import re
+import unicodedata
 
 from .models import (
     AgentProposalRequest,
@@ -10,6 +11,47 @@ from .models import (
     ProjectProposalRequest,
     TaskProposalRequest,
 )
+
+
+MAX_CHAT_MESSAGE_LENGTH = 4000
+PRIVILEGED_ACTION_RE = re.compile(
+    r"(?:忽略规则|(?<!待)批准|(?<!待)审批|拒绝|执行|运行|"
+    r"授权|删除|归档|修改\s*(?:state|vault|registry)|"
+    r"ignore\s+(?:the\s+)?rules?|\bapprove\b|\breject\b|"
+    r"\bexecute\b|\brun\b|\btick\b|\bauthorize\b|"
+    r"\bdelete\b|\barchive\b)",
+    re.IGNORECASE,
+)
+
+
+def normalize_chat_message(message):
+    """Normalize bounded user text before any local or remote parsing."""
+
+    if not isinstance(message, str):
+        raise TypeError("Chat message must be text.")
+
+    normalized_unicode = unicodedata.normalize("NFKC", message)
+
+    if any(
+        unicodedata.category(character) == "Cf"
+        for character in normalized_unicode
+    ):
+        raise ValueError(
+            "Chat message contains unsupported format controls."
+        )
+
+    normalized = " ".join(normalized_unicode.strip().split())
+
+    if len(normalized) > MAX_CHAT_MESSAGE_LENGTH:
+        raise ValueError("Chat message exceeds 4000 characters.")
+
+    return normalized
+
+
+def requests_privileged_action(message):
+    """Block approval/execution language before a provider is called."""
+
+    return bool(PRIVILEGED_ACTION_RE.search(message))
 
 
 class LLMAdapterError(RuntimeError):
@@ -55,14 +97,6 @@ class DeterministicIntentAdapter(LLMAdapter):
         "which",
         "pending",
         "status",
-    )
-    _PRIVILEGED_ACTION_RE = re.compile(
-        r"(?:忽略规则|(?<!待)批准|(?<!待)审批|拒绝|执行|运行|"
-        r"授权|删除|归档|修改\s*(?:state|vault|registry)|"
-        r"ignore\s+(?:the\s+)?rules?|\bapprove\b|\breject\b|"
-        r"\bexecute\b|\brun\b|\btick\b|\bauthorize\b|"
-        r"\bdelete\b|\barchive\b)",
-        re.IGNORECASE,
     )
     _ACTION_RE = re.compile(
         r"(?:推进|安排|(?<!待)批准|(?<!待)审批|执行|运行|创建|"
@@ -193,16 +227,10 @@ class DeterministicIntentAdapter(LLMAdapter):
         )
 
     def classify(self, message: str) -> Intent:
-        if not isinstance(message, str):
-            raise TypeError("Chat message must be text.")
-
-        normalized = " ".join(message.strip().split())
+        normalized = normalize_chat_message(message)
 
         if not normalized:
             return Intent(IntentKind.UNKNOWN, confidence=1.0)
-
-        if len(normalized) > 4000:
-            raise ValueError("Chat message exceeds 4000 characters.")
 
         lowered = normalized.lower()
 
@@ -215,7 +243,7 @@ class DeterministicIntentAdapter(LLMAdapter):
         }:
             return Intent(IntentKind.HELP, confidence=1.0)
 
-        if self._PRIVILEGED_ACTION_RE.search(normalized):
+        if requests_privileged_action(normalized):
             return Intent(
                 IntentKind.UNSUPPORTED_ACTION,
                 confidence=1.0,

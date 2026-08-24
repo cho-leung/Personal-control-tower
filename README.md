@@ -1,8 +1,8 @@
-# Personal Control Tower 3.0 Alpha
+# Personal Control Tower 3.0 Alpha.1
 
 Personal Control Tower is a local-first CLI control plane for governed projects, agents, tasks, and handoffs. Its vault is made of readable Markdown, YAML, and JSONL files, so the operating record remains inspectable without a database or hosted service.
 
-The v3 alpha is an incremental upgrade over the tagged v1 governance kernel, not a rewrite. Milestones 1 and 2 add a Chief of Staff chat entry for read-only organization queries and typed Proposal drafting while preserving every v1 command and authority boundary. Root still approves consequential changes, producers and auditors remain independent, artifacts are frozen by SHA-256, and the included task runtime is deterministic. It does not send messages, spend money, deploy software, or perform other external actions.
+The v3 alpha is an incremental upgrade over the tagged v1 governance kernel, not a rewrite. Milestones 1 and 2 add a Chief of Staff chat entry for read-only organization queries and typed Proposal drafting. Alpha.1 adds an optional real LLM understanding layer while preserving every v1 command and authority boundary. Root still approves consequential changes, producers and auditors remain independent, artifacts are frozen by SHA-256, and the included task runtime is deterministic. It does not send messages, spend money, deploy software, or perform other external actions.
 
 ## What it provides
 
@@ -11,7 +11,7 @@ The v3 alpha is an incremental upgrade over the tagged v1 governance kernel, not
 - Agent lifecycle management for status, role, capabilities, and project membership.
 - Durable project-local Tasks and immutable, acknowledged Handoffs.
 - A deterministic `MockAgentRuntime` and one-step `ChiefOfStaff` tick loop.
-- A provider-neutral `LLMAdapter` contract and offline `control-tower chat` interface for typed queries and Root-gated Proposal drafting.
+- Provider-neutral `LLMProvider` and `LLMAdapter` contracts, an OpenAI Responses API backend, and deterministic offline chat.
 - An append-only event ledger, decision log, dashboard, and human-readable evidence files.
 - Idempotent creation and replay checks: the same identity plus the same evidence is safe; conflicting evidence is rejected.
 
@@ -80,7 +80,7 @@ For complete examples and command arguments, see [Usage](docs/USAGE.md).
 
 ## Talk to the Chief of Staff
 
-The default adapter supports bounded natural-language queries and Proposal requests with no API key:
+The safe default is deterministic offline mode. It supports bounded natural-language queries and Proposal requests with no API key or network access:
 
 ```bash
 control-tower --vault "$VAULT_PATH" chat
@@ -116,6 +116,39 @@ control-tower --vault "$VAULT_PATH" approve <FULL_PROPOSAL_ID>
 ```
 
 Chat never accepts approval, rejection, execution, `tick`, or direct organization changes. Mixed requests such as “create and approve this task” fail closed. A missing, damaged, ambiguous, or stale Vault also fails closed.
+
+### Enable the OpenAI understanding layer
+
+Copy the example configuration and add your own API key and model:
+
+```bash
+cp .env.example .env
+```
+
+Set these values in `.env`:
+
+```dotenv
+LLM_PROVIDER=openai
+LLM_MODEL=your-structured-output-capable-model
+OPENAI_API_KEY=your-api-key
+LLM_TIMEOUT_SECONDS=30
+```
+
+The repository ignores `.env`. Pass it explicitly so a configuration in an unrelated working directory is never loaded by accident:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat \
+  --llm-config .env \
+  --message "What should I focus on across my projects today?"
+```
+
+You can switch back without editing the file:
+
+```bash
+control-tower --vault "$VAULT_PATH" chat --provider offline
+```
+
+OpenAI mode sends only the current user message plus a static intent schema. It does not send the Vault, TowerSnapshot, artifacts, event notes, proposal reasons, or API key as model input. The request enables strict structured output, supplies no tools, and sets `store=false`. Provider failures never silently fall back to another parser and never authorize or execute work.
 
 ## Safe synthetic demo
 

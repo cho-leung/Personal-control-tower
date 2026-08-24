@@ -1,9 +1,14 @@
 import argparse
 from pathlib import Path
+import sys
 
 from .agents import AgentRegistry
 from .chief_of_staff import ChiefOfStaff
 from .chat.shell import run_chat
+from .chat.config import (
+    LLMConfigurationError,
+    load_llm_settings,
+)
 from .core.decision_engine import DecisionEngine
 from .core.task_creation_engine import (
     TaskCreationCommand,
@@ -173,7 +178,7 @@ def _create_task(vault, args):
 
 def _build_parser():
     parser = argparse.ArgumentParser(
-        description="Personal Control Tower v3-alpha"
+        description="Personal Control Tower v3-alpha.1"
     )
     parser.add_argument(
         "--vault",
@@ -204,11 +209,25 @@ def _build_parser():
 
     chat = sub.add_parser(
         "chat",
-        help="Open the governed v3-alpha Chief of Staff chat.",
+        help="Open the governed v3-alpha.1 Chief of Staff chat.",
     )
     chat.add_argument(
         "--message",
         help="Run one governed chat turn and exit.",
+    )
+    chat.add_argument(
+        "--provider",
+        choices=("offline", "openai"),
+        help="Override LLM_PROVIDER for this chat session.",
+    )
+    chat.add_argument(
+        "--model",
+        help="Override LLM_MODEL for this chat session.",
+    )
+    chat.add_argument(
+        "--llm-config",
+        type=Path,
+        help="Read LLM settings from an explicit dotenv file.",
     )
 
     approve = sub.add_parser("approve")
@@ -344,9 +363,24 @@ def main():
     # Chat is deliberately routed before Vault initialization. A missing
     # Vault fails closed instead of being created by a query or draft.
     if args.cmd == "chat":
+        try:
+            settings = load_llm_settings(
+                config_path=args.llm_config,
+                provider_override=args.provider,
+                model_override=args.model,
+            )
+        except LLMConfigurationError as exc:
+            print(
+                "Chat unavailable; no action was taken: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 2
+
         return run_chat(
             args.vault,
             message=args.message,
+            settings=settings,
         )
 
     vault = Vault(args.vault)
