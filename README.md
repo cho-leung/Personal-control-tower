@@ -1,4 +1,39 @@
-# Personal Control Tower 1.0
+# Personal Control Tower
+
+Personal Control Tower is a local-first CLI control plane for governed projects, agents, tasks, and handoffs. Its vault is made of readable Markdown, YAML, and JSONL files, so the operating record remains inspectable without a database or hosted service.
+
+> **Current status:** this public repository is the v1.x implementation; newer experimental development continues privately.
+
+## Why this exists
+
+Coordinating several AI agents usually turns the human into a manual message router: copying outputs between chats, re-explaining context, and tracking who did what. Personal Control Tower makes the organization explicit: consequential actions flow through proposals, Root approval, bounded tasks, handoffs, and an append-only event ledger — all persisted as readable files.
+
+## What it does
+
+- Root-gated proposals for projects, agents, bindings, runtimes, and independent audits
+- A project state machine from authorization through production, audit, and the next Root decision
+- Durable project-local Tasks and acknowledged Handoffs
+- An append-only event ledger, decision log, and human-readable evidence files
+- Idempotent creation and replay checks
+
+## Architecture
+
+```mermaid
+flowchart TD
+    Human[Human / CLI] -->|proposal| Root[Root approval]
+    Registry[Agent registry] --> Root
+    Root -->|bounded task| Tasks[Tasks]
+    Tasks --> Handoffs[Handoffs]
+    Handoffs --> Runtime[Mock runtime / execution boundary]
+    Runtime -->|evidence| Audit[Independent audit]
+    Audit --> Root
+    Root --> Events[Event ledger / decision log]
+    Tasks --> FS[(Filesystem vault: Markdown / YAML / JSONL)]
+    Handoffs --> FS
+    Events --> FS
+```
+
+---
 
 Personal Control Tower is a local-first CLI control plane for governed projects, agents, tasks, and handoffs. Its vault is made of readable Markdown, YAML, and JSONL files, so the operating record remains inspectable without a database or hosted service.
 
@@ -153,3 +188,10 @@ The local bus and vault remain authoritative even when optional model-backed age
 - [Usage](docs/USAGE.md)
 - [Schemas and on-disk evidence](docs/SCHEMAS.md)
 - [Obsidian setup](docs/OBSIDIAN_SETUP.md)
+
+## Limitations
+
+- The included agent runtime is a deterministic mock: it performs no external actions, sends no messages, and spends no money.
+- Single-user, local-first design: no networking, background services, multi-user isolation, or remote collaboration.
+- v1 is deliberately conservative; it is not production-hardened for adversarial or high-volume environments.
+- This repository does not include the newer experimental development; that work remains private for now.
